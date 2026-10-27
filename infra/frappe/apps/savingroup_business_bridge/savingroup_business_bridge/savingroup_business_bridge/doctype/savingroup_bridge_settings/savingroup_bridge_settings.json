@@ -1,0 +1,64 @@
+{
+  "actions": [],
+  "creation": "2026-10-18 12:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 0,
+  "engine": "InnoDB",
+  "field_order": ["webhook_url", "webhook_secret", "events_enabled"],
+  "fields": [
+    {
+      "fieldname": "webhook_url",
+      "fieldtype": "Data",
+      "label": "Savingroup Webhook URL"
+    },
+    {
+      "fieldname": "webhook_secret",
+      "fieldtype": "Password",
+      "label": "Savingroup Webhook Secret"
+    },
+    {
+      "default": "1",
+      "fieldname": "events_enabled",
+      "fieldtype": "Check",
+      "label": "Deliver Events"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "issingle": 1,
+  "links": [],
+  "modified": "2026-10-18 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Savingroup Business Bridge",
+  "name": "Savingroup Bridge Settings",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 0,
+      "email": 0,
+      "export": 0,
+      "print": 0,
+      "read": 1,
+      "report": 0,
+      "role": "System Manager",
+      "share": 0,
+      "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 0,
+      "email": 0,
+      "export": 0,
+      "print": 0,
+      "read": 1,
+      "report": 0,
+      "role": "Savingroup Gateway",
+      "share": 0,
+      "write": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": [],
+  "track_changes": 0
+}

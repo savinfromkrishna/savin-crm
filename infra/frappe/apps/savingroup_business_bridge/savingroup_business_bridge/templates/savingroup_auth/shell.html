@@ -1,0 +1,40 @@
+{#- Layout of the sign-in pages: the organization's brand, the view, a footer,
+    and on wide screens a panel listing the site's apps. Pages fill rk_body. -#}
+{% extends "templates/base.html" %}
+{% import "savingroup_business_bridge/templates/savingroup_auth/macros.html" as rk with context %}
+
+{%- block head_include %}
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)">
+<style>
+{% include "savingroup_business_bridge/templates/savingroup_auth/auth.css" %}
+</style>
+{%- block rk_head %}{% endblock %}
+{% endblock -%}
+
+{%- block navbar -%}
+{%- if show_language_picker -%}{{ super() }}{%- endif -%}
+{%- endblock -%}
+
+{%- block footer -%}
+{%- if show_footer_on_login -%}{{ super() }}{%- endif -%}
+{%- endblock -%}
+
+{% block content %}
+<div class="rk-auth{% if not rk_panel %} rk-auth--single{% endif %}" id="page-{{ (name or route) | e }}" data-path="{{ pathname | e }}">
+	<div class="rk-auth__main">
+		<header class="rk-auth__top">{{ rk.brand() }}</header>
+		<main class="rk-auth__body">
+			{% block rk_body %}{% endblock %}
+		</main>
+		<footer class="rk-auth__foot">
+			<span>{{ rk_copyright | e }}</span>
+			<span class="rk-powered">{{ rk.savingroup_mark() }}<span>{{ _("Powered by Savingroup") }}</span></span>
+		</footer>
+	</div>
+	{%- if rk_panel %}
+	{{ rk.panel() }}
+	{%- endif %}
+</div>
+{% endblock %}

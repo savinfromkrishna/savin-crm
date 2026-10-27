@@ -1,0 +1,53 @@
+# Optional overlay: the ERPNext + Frappe CRM site (infra/frappe) on the production stack.
+# Layer it after docker-compose.prod.yml (and docker-compose.prod.docker.yml when used):
+#
+#   docker compose --env-file .env \
+#     -f infra/compose/docker-compose.prod.yml \
+#     -f infra/compose/docker-compose.prod.docker.yml \
+#     -f infra/compose/docker-compose.prod.business.yml \
+#     up -d --build --wait
+#
+# infra/compose/deploy-full.sh runs exactly that after starting the site with
+# infra/frappe/compose.prod.yaml. Both projects join the external `savingroup-business`
+# network, which the script creates:
+#
+# - Caddy serves the site on its own HTTPS host (FRAPPE_HOST). Browser links and the API
+#   use that one URL, so the environment's site URL is https://FRAPPE_HOST.
+# - Inside the `app` network Caddy also answers to FRAPPE_HOST, so the API and worker reach
+#   the site without leaving the host or depending on hairpin NAT.
+# - The site posts signed events straight to the API over `savingroup-business`; the public
+#   Caddy routes do not include the API's /webhooks path.
+
+services:
+  api:
+    environment:
+      BUSINESS_APPS_ENABLED: "true"
+      BUSINESS_WEBHOOK_BASE_URL: http://savingroup-api:3100
+    networks:
+      business:
+        aliases:
+          - savingroup-api
+
+  worker:
+    environment:
+      BUSINESS_APPS_ENABLED: "true"
+      BUSINESS_WEBHOOK_BASE_URL: http://savingroup-api:3100
+
+  caddy:
+    environment:
+      FRAPPE_HOST: ${FRAPPE_HOST:?Set FRAPPE_HOST in .env}
+    volumes:
+      # Caddyfile.business imports the app's Caddyfile (or the operator's CADDYFILE_PATH)
+      # and adds the site's host.
+      - ./Caddyfile.business:/etc/caddy/Caddyfile:ro
+      - ${CADDYFILE_PATH:-./Caddyfile.prod}:/etc/caddy/Caddyfile.app:ro
+    networks:
+      app:
+        aliases:
+          - ${FRAPPE_HOST:?Set FRAPPE_HOST in .env}
+      business: {}
+
+networks:
+  business:
+    name: savingroup-business
+    external: true

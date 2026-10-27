@@ -1,0 +1,71 @@
+# Production overlay for the business site on the same host as the Savingroup production stack
+# (infra/compose/docker-compose.prod.business.yml). Layer it after compose.yaml:
+#
+#   docker compose -f infra/frappe/compose.yaml -f infra/frappe/compose.prod.yaml \
+#     --env-file infra/frappe/.env up -d
+#
+# infra/compose/deploy-full.sh runs it for you. Compared with the development file:
+# - services come back after a reboot (unless-stopped) and keep bounded logs;
+# - the nginx front door is published on loopback only; the public site is Caddy's
+#   FRAPPE_HOST, reached over the external `savingroup-business` network;
+# - nginx trusts X-Forwarded-For from that network only, so the site sees real client
+#   addresses for its rate limits and logs;
+# - the queue workers that deliver signed events join the network to reach the API.
+# Needs Docker Compose 2.24.4 or newer (`!override`).
+
+x-prod: &prod
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  backend:
+    <<: *prod
+    networks: [frappe, business]
+
+  frontend:
+    <<: *prod
+    ports: !override
+      - "127.0.0.1:${FRAPPE_HTTP_PORT:-8090}:8080"
+    environment:
+      UPSTREAM_REAL_IP_ADDRESS: ${SAVINGROUP_BUSINESS_SUBNET:-172.31.250.0/24}
+    networks:
+      frappe: {}
+      business:
+        aliases:
+          - frappe-frontend
+
+  websocket:
+    <<: *prod
+
+  queue-short:
+    <<: *prod
+    networks: [frappe, business]
+
+  queue-long:
+    <<: *prod
+    networks: [frappe, business]
+
+  scheduler:
+    <<: *prod
+
+  db:
+    <<: *prod
+    # A first start initialises the data directory, which on a busy host (the first deploy is
+    # also building images) outlasts the development file's 60-second health window.
+    healthcheck:
+      start_period: 180s
+
+  redis-cache:
+    <<: *prod
+
+  redis-queue:
+    <<: *prod
+
+networks:
+  business:
+    name: savingroup-business
+    external: true

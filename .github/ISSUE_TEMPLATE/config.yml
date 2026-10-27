@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerabilities
+    url: https://github.com/savin8878/testing/blob/main/SECURITY.md
+    about: Report security issues to security@savingroup.com — do not open a public issue.
+  - name: User support
+    url: mailto:support@savingroup.com
+    about: Questions about using Savingroup or self-hosting help.
+  - name: Maintainer
+    url: mailto:elie@savingroup.com
+    about: Reach the maintainer directly.

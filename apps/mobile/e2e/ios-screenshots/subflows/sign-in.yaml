@@ -1,0 +1,29 @@
+appId: com.savingroup.app
+---
+- runFlow: launch-app.yaml
+- runFlow:
+    when:
+      visible: "Sign up for Savingroup"
+    commands:
+      - tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Sign in to Savingroup"
+    timeout: 15000
+- tapOn: "Email"
+- inputText: ${SAVINGROUP_ACTIVE_EMAIL}
+- tapOn: "Password"
+- inputText: ${SAVINGROUP_SCREENSHOT_PASSWORD}
+- hideKeyboard
+- tapOn: "Sign in"
+- tapOn:
+    text: "Not Now"
+    optional: true
+- tapOn:
+    text: "Don’t allow"
+    optional: true
+- tapOn:
+    text: "Don't allow"
+    optional: true
+- extendedWaitUntil:
+    visible: "Account"
+    timeout: 40000

@@ -1,0 +1,15 @@
+# Used by docker-compose.prod.business.yml: the app's Caddyfile plus the business site.
+import /etc/caddy/Caddyfile.app
+
+{$FRAPPE_HOST:erp.example.com} {
+	encode zstd gzip
+
+	@hsts not host localhost 127.0.0.1
+	header @hsts Strict-Transport-Security "max-age=31536000"
+
+	# The site's nginx front door on the shared savingroup-business network. It routes
+	# every host to the bench site and proxies /socket.io to the websocket service.
+	reverse_proxy frappe-frontend:8080 {
+		import deploy_retry
+	}
+}

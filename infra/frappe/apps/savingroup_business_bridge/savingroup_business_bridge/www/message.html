@@ -1,0 +1,51 @@
+{#- Frappe's message page in the sign-in layout. Keeps Frappe's context keys
+    (title, message, primary_action, primary_label, error_code) and its
+    message_body block. -#}
+{% extends "savingroup_business_bridge/templates/savingroup_auth/shell.html" %}
+{% import "savingroup_business_bridge/templates/savingroup_auth/macros.html" as rk with context %}
+
+{% block title %}{{ (title or _("Message")) | striptags }}{% endblock %}
+
+{% block rk_head %}
+{%- if rk_redirect %}
+<meta http-equiv="refresh" content="0; url={{ rk_redirect | e }}">
+{%- endif %}
+{% endblock %}
+
+{% block rk_body %}
+<section class="rk-view">
+	<div class="rk-card">
+		{{ rk.head(rk_heading | e, None, rk_icon, rk_tone) }}
+		{% block message_body %}
+		{%- if rk_text %}
+		<div class="rk-message"><p>{{ rk_text }}</p></div>
+		{%- elif message %}
+		<div class="rk-message">{{ message }}</div>
+		{%- endif %}
+		{%- if error_code and not rk_redirect %}
+		<p class="rk-code">{{ _("Status: {0}").format(error_code) }}</p>
+		{%- endif %}
+		{%- set action = rk_primary[0] if rk_primary else primary_action %}
+		{%- set label = rk_primary[1] if rk_primary else (primary_label or _("Home")) %}
+		{%- if action %}
+		<div class="rk-actions">
+			<a href="{{ action | e }}" class="es-button rk-btn rk-btn--primary" data-variant="solid">{{ label | e }}</a>
+		</div>
+		{%- endif %}
+		{% endblock %}
+	</div>
+</section>
+{% endblock %}
+
+{% block script %}
+<script>
+	{%- if rk_redirect %}
+	window.location.replace({{ rk_redirect | tojson }});
+	{%- endif %}
+	frappe.ready(function () {
+		if (window.location.hash || window.location.href.includes("/desk")) {
+			localStorage.setItem("session_last_route", window.location.pathname);
+		}
+	});
+</script>
+{% endblock %}

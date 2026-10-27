@@ -1,0 +1,172 @@
+# Savingroup business environment: ERPNext + Frappe CRM (+ India Compliance) with the
+# Savingroup bridge app, following frappe_docker's single-compose layout.
+#
+# Build the image once (see README.md), copy .env.example to .env, then:
+#   docker compose -f infra/frappe/compose.yaml up -d
+#   docker compose -f infra/frappe/compose.yaml --profile bootstrap run --rm bootstrap
+#
+# Images are pinned by tag and digest. Nothing here uses a default password:
+# every secret comes from .env.
+name: savingroup-frappe
+
+x-frappe: &frappe
+  image: ${SAVINGROUP_FRAPPE_IMAGE:-savingroup/frappe-business:16.51.1}
+  pull_policy: never
+  restart: on-failure
+  networks: [frappe]
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+
+x-queue-env: &queue-env
+  FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+  FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+
+services:
+  configurator:
+    image: ${SAVINGROUP_FRAPPE_IMAGE:-savingroup/frappe-business:16.51.1}
+    pull_policy: never
+    restart: "no"
+    networks: [frappe]
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host $$DB_HOST;
+        bench set-config -gp db_port $$DB_PORT;
+        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        bench set-config -gp socketio_port $$SOCKETIO_PORT;
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: "9000"
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    <<: *frappe
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+
+  frontend:
+    <<: *frappe
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      BACKEND: backend:8000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-frontend}
+      SOCKETIO: websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    ports:
+      - "${FRAPPE_HTTP_PORT:-8090}:8080"
+    depends_on:
+      - websocket
+      - backend
+
+  websocket:
+    <<: *frappe
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    environment: *queue-env
+
+  queue-short:
+    <<: *frappe
+    command: ["bench", "worker", "--queue", "short,default"]
+    environment: *queue-env
+
+  queue-long:
+    <<: *frappe
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    environment: *queue-env
+
+  scheduler:
+    <<: *frappe
+    command: ["bench", "schedule"]
+    environment: *queue-env
+
+  # One-shot provisioning: creates the site, installs the apps, completes the
+  # setup wizard from the blueprint and creates the gateway user. Idempotent.
+  bootstrap:
+    <<: *frappe
+    profiles: [bootstrap]
+    restart: "no"
+    entrypoint: ["bash", "/opt/savingroup/scripts/bootstrap-site.sh"]
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      SITE_NAME: ${SITE_NAME:-frontend}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/frappe/.env}
+      SITE_ADMIN_PASSWORD: ${SITE_ADMIN_PASSWORD:?set SITE_ADMIN_PASSWORD in infra/frappe/.env}
+      SITE_ADMIN_EMAIL: ${SITE_ADMIN_EMAIL:-admin@example.com}
+      BLUEPRINT: ${BLUEPRINT:-india-smb}
+      COMPANY_NAME: ${COMPANY_NAME:?set COMPANY_NAME in infra/frappe/.env}
+      COMPANY_ABBR: ${COMPANY_ABBR:?set COMPANY_ABBR in infra/frappe/.env}
+      GATEWAY_USER_EMAIL: ${GATEWAY_USER_EMAIL:-savingroup-gateway@example.com}
+      ALLOW_NEGATIVE_STOCK: ${ALLOW_NEGATIVE_STOCK:-0}
+      GATEWAY_ADMIN: ${GATEWAY_ADMIN:-0}
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+      - ./scripts:/opt/savingroup/scripts:ro
+      - ./blueprints:/opt/savingroup/blueprints:ro
+      - ./state:/opt/savingroup/state
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+
+  db:
+    image: mariadb:11.8@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa
+    restart: on-failure
+    networks: [frappe]
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/frappe/.env}
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:6.2-alpine@sha256:b362b5dff9d14d961dc3352db4776aba6a8c53ca2661d7c74ad2c121f82cdaea
+    restart: on-failure
+    networks: [frappe]
+
+  redis-queue:
+    image: redis:6.2-alpine@sha256:b362b5dff9d14d961dc3352db4776aba6a8c53ca2661d7c74ad2c121f82cdaea
+    restart: on-failure
+    networks: [frappe]
+    volumes:
+      - redis-queue-data:/data
+
+volumes:
+  db-data:
+  redis-queue-data:
+  sites:
+  logs:
+
+networks:
+  frappe:
+    driver: bridge

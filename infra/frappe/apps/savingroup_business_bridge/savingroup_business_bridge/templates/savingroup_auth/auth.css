@@ -1,0 +1,1158 @@
+/* Sign-in pages of a Savingroup business site (www/login, www/update-password,
+   www/message in savingroup_business_bridge). Colours, radius and type follow
+   Savingroup's own sign-in (packages/ui-tokens/src/index.ts, apps/web/src/pages/Auth.tsx);
+   the site cannot load that package, so the values are repeated here.
+   Included inline by templates/savingroup_auth/shell.html: no Jinja delimiters below. */
+
+body.rk-auth-page {
+	--rk-font: "InterVariable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--rk-bg: #ffffff;
+	--rk-fg: #1a1a1a;
+	--rk-muted: #6c6c70;
+	--rk-faint: #a1a1a6;
+	--rk-line: #ecece8;
+	--rk-subtle: #f4f4f1;
+	--rk-input: #ffffff;
+	--rk-input-line: #dcdcd6;
+	--rk-input-hover: #c6c6c0;
+	--rk-focus: #1a1a1a;
+	--rk-ring: rgba(26, 26, 26, 0.1);
+	--rk-primary: #1a1a1a;
+	--rk-primary-hover: #333333;
+	--rk-primary-fg: #f9f9f7;
+	--rk-secondary: #ffffff;
+	--rk-secondary-hover: #f6f6f3;
+	--rk-danger: #dc2626;
+	--rk-danger-bg: #fef3f2;
+	--rk-danger-line: #fbd5d1;
+	--rk-danger-fg: #b42318;
+	--rk-danger-ring: rgba(220, 38, 38, 0.12);
+	--rk-success: #228b3b;
+	--rk-success-bg: #f1faf3;
+	--rk-success-line: #cbebd4;
+	--rk-success-fg: #1c6e31;
+	--rk-warning: #b7791f;
+	--rk-warning-fg: #8a5a14;
+	--rk-panel: #0b0c0e;
+	--rk-panel-fg: #ececee;
+	--rk-panel-muted: #8e8e93;
+	--rk-panel-line: rgba(255, 255, 255, 0.08);
+	--rk-panel-tile: rgba(255, 255, 255, 0.035);
+	--rk-plate: transparent;
+	--rk-plate-pad: 0;
+	--rk-radius: 12px;
+	color-scheme: light;
+	margin: 0;
+	min-height: 100vh;
+	background: var(--rk-bg);
+	color: var(--rk-fg);
+	font-family: var(--rk-font);
+	font-size: 15px;
+	line-height: 1.5;
+	font-feature-settings: "cv11", "ss01";
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+	body.rk-auth-page {
+		--rk-bg: #0b0c0e;
+		--rk-fg: #ececee;
+		--rk-muted: #8e8e93;
+		--rk-faint: #5c5c61;
+		--rk-line: #1e2026;
+		--rk-subtle: #16171b;
+		--rk-input: #111215;
+		--rk-input-line: #26282f;
+		--rk-input-hover: #363841;
+		--rk-focus: #ececee;
+		--rk-ring: rgba(236, 236, 238, 0.12);
+		--rk-primary: #f1f1ef;
+		--rk-primary-hover: #d9d9d6;
+		--rk-primary-fg: #0b0c0e;
+		--rk-secondary: #111215;
+		--rk-secondary-hover: #18191e;
+		--rk-danger: #ef4444;
+		--rk-danger-bg: rgba(239, 68, 68, 0.1);
+		--rk-danger-line: rgba(239, 68, 68, 0.28);
+		--rk-danger-fg: #fca5a5;
+		--rk-danger-ring: rgba(239, 68, 68, 0.18);
+		--rk-success: #4ecb71;
+		--rk-success-bg: rgba(78, 203, 113, 0.1);
+		--rk-success-line: rgba(78, 203, 113, 0.28);
+		--rk-success-fg: #86e0a0;
+		--rk-warning: #e9c46a;
+		--rk-warning-fg: #e9c46a;
+		--rk-panel: #141518;
+		--rk-panel-line: rgba(255, 255, 255, 0.07);
+		/* Logos are drawn for light backgrounds: give them a light plate. */
+		--rk-plate: #ffffff;
+		--rk-plate-pad: 4px 8px;
+		color-scheme: dark;
+	}
+}
+
+.rk-auth *,
+.rk-auth *::before,
+.rk-auth *::after {
+	box-sizing: border-box;
+}
+
+.rk-auth h1,
+.rk-auth p,
+.rk-auth ul {
+	margin: 0;
+}
+
+.rk-auth .hidden,
+.rk-auth .hide {
+	display: none !important;
+}
+
+.rk-visually-hidden {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Layout */
+
+.rk-auth {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	min-height: 100vh;
+	min-height: 100dvh;
+	background: var(--rk-bg);
+	color: var(--rk-fg);
+}
+
+@media (min-width: 1024px) {
+	.rk-auth:not(.rk-auth--single) {
+		grid-template-columns: minmax(460px, 0.92fr) minmax(0, 1.08fr);
+	}
+}
+
+.rk-auth__main {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	padding: 20px 16px 24px;
+}
+
+@media (min-width: 640px) {
+	.rk-auth__main {
+		padding: 28px 40px;
+	}
+}
+
+@media (min-width: 1280px) {
+	.rk-auth__main {
+		padding: 32px 56px;
+	}
+}
+
+.rk-auth__top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 44px;
+}
+
+.rk-auth__body {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 48px 0;
+}
+
+@media (max-width: 639px) {
+	.rk-auth__body {
+		justify-content: flex-start;
+		padding: 40px 0 32px;
+	}
+}
+
+.rk-auth .page-card,
+.rk-auth .rk-card {
+	width: 100%;
+	max-width: 400px;
+	margin: 0 auto;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: none;
+	box-shadow: none;
+}
+
+.rk-auth--single .rk-card {
+	max-width: 440px;
+}
+
+.rk-auth__foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px 16px;
+	font-size: 13px;
+	color: var(--rk-muted);
+}
+
+.rk-powered {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.rk-mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 2.5px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--rk-subtle);
+	box-shadow: inset 0 0 0 1px var(--rk-line);
+}
+
+.rk-mark i {
+	display: block;
+	width: 2.5px;
+	height: 6px;
+	border-radius: 2px;
+	background: var(--rk-fg);
+}
+
+/* Brand */
+
+.rk-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 36px;
+	color: var(--rk-fg);
+}
+
+.rk-brand__plate {
+	display: inline-flex;
+	align-items: center;
+	padding: var(--rk-plate-pad);
+	border-radius: 9px;
+	background: var(--rk-plate);
+}
+
+.rk-brand__logo {
+	display: block;
+	width: auto;
+	height: 40px;
+	max-width: 240px;
+	object-fit: contain;
+}
+
+.rk-brand__mark {
+	display: inline-grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 9px;
+	background: var(--rk-primary);
+	color: var(--rk-primary-fg);
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.rk-brand__name {
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+/* Views. login.js shows one section at a time. */
+
+.rk-auth .for-forgot,
+.rk-auth .for-login-with-email-link,
+.rk-auth .for-signup,
+.rk-auth .for-email-login {
+	display: none;
+}
+
+.rk-head {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0 0 32px;
+	padding: 0;
+	text-align: start;
+}
+
+.rk-auth .rk-title {
+	margin: 0;
+	color: var(--rk-fg);
+	font-family: var(--rk-font);
+	font-size: clamp(26px, 1.6vw + 18px, 32px);
+	font-weight: 550;
+	line-height: 1.15;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+}
+
+.rk-auth .rk-subtitle {
+	margin: 0;
+	color: var(--rk-muted);
+	font-size: 15px;
+	line-height: 1.55;
+	text-wrap: pretty;
+}
+
+.rk-auth .rk-subtitle b,
+.rk-auth .rk-subtitle strong {
+	color: var(--rk-fg);
+	font-weight: 550;
+	word-break: break-word;
+}
+
+.rk-badge {
+	display: inline-grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	margin-bottom: 6px;
+	border-radius: var(--rk-radius);
+	background: var(--rk-subtle);
+	box-shadow: inset 0 0 0 1px var(--rk-line);
+	color: var(--rk-fg);
+}
+
+.rk-badge svg {
+	width: 22px;
+	height: 22px;
+}
+
+.rk-badge--danger {
+	background: var(--rk-danger-bg);
+	box-shadow: inset 0 0 0 1px var(--rk-danger-line);
+	color: var(--rk-danger-fg);
+}
+
+.rk-badge--success {
+	background: var(--rk-success-bg);
+	box-shadow: inset 0 0 0 1px var(--rk-success-line);
+	color: var(--rk-success-fg);
+}
+
+.rk-form {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	margin: 0;
+}
+
+.rk-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+
+/* Fields */
+
+.rk-auth .form-group,
+.rk-auth .rk-field {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+}
+
+.rk-label-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.rk-auth .rk-label {
+	margin: 0;
+	color: var(--rk-muted);
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 1.3;
+}
+
+.rk-auth .email-field,
+.rk-auth .password-field {
+	position: relative;
+	width: 100%;
+}
+
+.rk-auth .rk-input,
+.rk-auth #twofactor_div .form-control {
+	display: block;
+	width: 100%;
+	height: 48px;
+	margin: 0;
+	padding: 0 16px;
+	border: 1px solid var(--rk-input-line);
+	border-radius: var(--rk-radius);
+	background: var(--rk-input);
+	box-shadow: none;
+	color: var(--rk-fg);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1.25;
+	outline: none;
+	appearance: none;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rk-auth .rk-input::placeholder {
+	color: var(--rk-faint);
+	opacity: 1;
+}
+
+.rk-auth .rk-input:hover {
+	border-color: var(--rk-input-hover);
+}
+
+.rk-auth .rk-input:focus {
+	border-color: var(--rk-focus);
+	box-shadow: 0 0 0 4px var(--rk-ring);
+}
+
+.rk-auth .rk-input:-webkit-autofill,
+.rk-auth .rk-input:-webkit-autofill:hover {
+	-webkit-text-fill-color: var(--rk-fg);
+	-webkit-box-shadow: 0 0 0 1000px var(--rk-input) inset;
+	caret-color: var(--rk-fg);
+	transition: background-color 9999s ease 0s;
+}
+
+.rk-auth .rk-input:-webkit-autofill:focus {
+	-webkit-box-shadow: 0 0 0 1000px var(--rk-input) inset, 0 0 0 4px var(--rk-ring);
+}
+
+.rk-auth .rk-input::-ms-reveal {
+	display: none;
+}
+
+.rk-auth .rk-input--code {
+	font-size: 22px;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.32em;
+	text-align: center;
+}
+
+.rk-auth .form-group.invalid .rk-input,
+.rk-auth .page-card-body.invalid .rk-input {
+	border-color: var(--rk-danger);
+}
+
+.rk-auth .form-group.invalid .rk-input:focus,
+.rk-auth .page-card-body.invalid .rk-input:focus {
+	box-shadow: 0 0 0 4px var(--rk-danger-ring);
+}
+
+.rk-auth .field-error {
+	display: none;
+	margin: 0;
+	color: var(--rk-danger-fg);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.rk-auth .form-group.invalid .field-error:not(:empty) {
+	display: block;
+}
+
+.rk-hint {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	color: var(--rk-muted);
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.rk-caps {
+	color: var(--rk-warning-fg);
+}
+
+.rk-password .rk-input {
+	padding-inline-end: 52px;
+}
+
+.rk-auth .rk-reveal {
+	position: absolute;
+	top: 50%;
+	inset-inline-end: 4px;
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--rk-muted);
+	cursor: pointer;
+	transform: translateY(-50%);
+	transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.rk-auth .rk-reveal:hover {
+	background: var(--rk-subtle);
+	color: var(--rk-fg);
+}
+
+.rk-auth .rk-reveal:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--rk-focus);
+}
+
+.rk-reveal svg {
+	width: 18px;
+	height: 18px;
+}
+
+.rk-reveal .rk-reveal__hide,
+.rk-reveal[aria-pressed="true"] .rk-reveal__show {
+	display: none;
+}
+
+.rk-reveal[aria-pressed="true"] .rk-reveal__hide {
+	display: contents;
+}
+
+.rk-reveal__show {
+	display: contents;
+}
+
+/* Buttons */
+
+.rk-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	width: 100%;
+	height: 48px;
+	margin: 0;
+	padding: 0 20px;
+	border: 1px solid transparent;
+	border-radius: var(--rk-radius);
+	box-shadow: none;
+	font: inherit;
+	font-size: 15px;
+	font-weight: 550;
+	line-height: 1;
+	letter-spacing: -0.005em;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn:active {
+	transform: translateY(1px);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--rk-bg), 0 0 0 4px var(--rk-focus);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn--primary,
+.rk-auth-page .rk-auth .es-button.rk-btn--primary:disabled {
+	border-color: transparent;
+	background: var(--rk-primary);
+	color: var(--rk-primary-fg);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn--primary:hover {
+	background: var(--rk-primary-hover);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn--secondary,
+.rk-auth-page .rk-auth .es-button.rk-btn--secondary:disabled {
+	border-color: var(--rk-input-line);
+	background: var(--rk-secondary);
+	color: var(--rk-fg);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn--secondary:hover {
+	border-color: var(--rk-input-hover);
+	background: var(--rk-secondary-hover);
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn[aria-busy="true"] {
+	opacity: 1;
+	pointer-events: none;
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn > svg,
+.rk-auth-page .rk-auth .es-button.rk-btn .rk-provider-icon > img,
+.rk-auth-page .rk-auth .es-button.rk-btn .rk-provider-icon > svg {
+	width: 18px;
+	height: 18px;
+	flex: none;
+}
+
+.rk-auth-page .rk-auth .es-button.rk-btn .es-spinner {
+	width: 18px;
+	height: 18px;
+}
+
+.rk-provider-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.rk-divider {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 4px 0;
+	color: var(--rk-faint);
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.rk-divider::before,
+.rk-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--rk-line);
+}
+
+/* Links and switch lines */
+
+.rk-auth .rk-link {
+	color: var(--rk-fg);
+	font-weight: 550;
+	text-decoration: none;
+	text-underline-offset: 3px;
+	border-radius: 4px;
+}
+
+.rk-auth .rk-link:hover {
+	color: var(--rk-fg);
+	text-decoration: underline;
+}
+
+.rk-auth .rk-link:focus-visible {
+	outline: 2px solid var(--rk-focus);
+	outline-offset: 2px;
+}
+
+.rk-auth .rk-link--muted {
+	color: var(--rk-muted);
+	font-size: 13.5px;
+	font-weight: 500;
+}
+
+.rk-auth .rk-link--muted:hover {
+	color: var(--rk-fg);
+}
+
+.rk-auth .rk-link--back {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.rk-link--back svg {
+	width: 16px;
+	height: 16px;
+}
+
+.rk-auth .rk-switch {
+	margin-top: 28px;
+	color: var(--rk-muted);
+	font-size: 14px;
+}
+
+.rk-resend {
+	margin: 0;
+	color: var(--rk-muted);
+	font-size: 14px;
+}
+
+/* Alerts (Frappe's .es-alert markup) */
+
+.rk-auth-page .rk-auth .es-alert.rk-alert {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid;
+	border-radius: var(--rk-radius);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.rk-auth-page .rk-auth .es-alert.rk-alert.hidden {
+	display: none !important;
+}
+
+.rk-auth-page .rk-auth .rk-alert--error {
+	border-color: var(--rk-danger-line);
+	background: var(--rk-danger-bg);
+	color: var(--rk-danger-fg);
+}
+
+.rk-auth-page .rk-auth .rk-alert--success {
+	border-color: var(--rk-success-line);
+	background: var(--rk-success-bg);
+	color: var(--rk-success-fg);
+}
+
+.rk-auth-page .rk-auth .rk-alert > svg,
+.rk-auth-page .rk-auth .rk-alert .es-alert__title {
+	color: inherit;
+}
+
+.rk-alert > svg {
+	flex: none;
+	width: 18px;
+	height: 18px;
+	margin-top: 1px;
+}
+
+.rk-alert .es-alert__content {
+	min-width: 0;
+}
+
+.rk-auth .rk-alert .es-alert__title {
+	display: block !important;
+	word-break: break-word;
+}
+
+/* Password strength, rules and match */
+
+.rk-strength {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.rk-strength__bar {
+	flex: 1;
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 4px;
+}
+
+.rk-strength__bar i {
+	display: block;
+	height: 4px;
+	border-radius: 4px;
+	background: var(--rk-line);
+	transition: background-color 0.2s ease;
+}
+
+.rk-strength[data-score="0"] .rk-strength__bar i:nth-child(-n + 1),
+.rk-strength[data-score="1"] .rk-strength__bar i:nth-child(-n + 1) {
+	background: var(--rk-danger);
+}
+
+.rk-strength[data-score="2"] .rk-strength__bar i:nth-child(-n + 2) {
+	background: var(--rk-warning);
+}
+
+.rk-strength[data-score="3"] .rk-strength__bar i:nth-child(-n + 3),
+.rk-strength[data-score="4"] .rk-strength__bar i {
+	background: var(--rk-success);
+}
+
+.rk-strength__label {
+	min-width: 52px;
+	color: var(--rk-muted);
+	font-size: 12.5px;
+	font-weight: 500;
+	text-align: end;
+}
+
+.rk-rules {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	padding: 0;
+	list-style: none;
+	color: var(--rk-muted);
+	font-size: 13px;
+}
+
+.rk-rule {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	transition: color 0.15s ease;
+}
+
+.rk-rule svg {
+	width: 14px;
+	height: 14px;
+}
+
+.rk-rule .rk-rule__met,
+.rk-rule[data-met="true"] .rk-rule__todo {
+	display: none;
+}
+
+.rk-rule[data-met="true"] .rk-rule__met {
+	display: inline;
+}
+
+.rk-rule[data-met="true"] {
+	color: var(--rk-success-fg);
+}
+
+.rk-match[data-state="ok"] {
+	color: var(--rk-success-fg);
+}
+
+.rk-match[data-state="no"],
+.rk-policy {
+	color: var(--rk-danger-fg);
+}
+
+.rk-match svg {
+	width: 14px;
+	height: 14px;
+}
+
+.rk-match .rk-match__no,
+.rk-match[data-state="no"] .rk-match__ok {
+	display: none;
+}
+
+.rk-match[data-state="no"] .rk-match__no {
+	display: inline;
+}
+
+/* Message pages */
+
+.rk-message {
+	color: var(--rk-muted);
+	font-size: 15px;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+
+.rk-message a {
+	color: var(--rk-fg);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.rk-message p {
+	margin: 0 0 12px;
+}
+
+.rk-auth .rk-code {
+	margin-top: 12px;
+	color: var(--rk-faint);
+	font-size: 12.5px;
+}
+
+.rk-head + .rk-actions,
+.rk-message + .rk-actions,
+.rk-code + .rk-actions {
+	margin-top: 28px;
+}
+
+.rk-head + .rk-actions {
+	margin-top: 0;
+}
+
+/* Two-step verification markup inserted by login.js */
+
+.rk-auth #twofactor_div .page-card-head.p-0 .indicator {
+	color: var(--rk-fg);
+	font-size: 22px;
+	font-weight: 550;
+}
+
+.rk-auth #otp_div .text-muted {
+	padding: 0 !important;
+	color: inherit !important;
+}
+
+/* Panel */
+
+.rk-panel {
+	display: none;
+}
+
+@media (min-width: 1024px) {
+	.rk-panel {
+		position: relative;
+		isolation: isolate;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+		margin: 12px;
+		margin-inline-start: 0;
+		padding: clamp(40px, 4.5vw, 72px);
+		overflow: hidden;
+		border-radius: 24px;
+		background: var(--rk-panel);
+		color: var(--rk-panel-fg);
+	}
+}
+
+.rk-panel__art {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	pointer-events: none;
+	background:
+		radial-gradient(60% 55% at 86% 10%, rgba(255, 255, 255, 0.11), transparent 70%),
+		radial-gradient(45% 40% at 8% 96%, rgba(255, 255, 255, 0.05), transparent 70%);
+}
+
+.rk-panel__art::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1.3px);
+	background-size: 22px 22px;
+	opacity: 0.5;
+	-webkit-mask-image: radial-gradient(70% 60% at 80% 18%, #000 0%, transparent 72%);
+	mask-image: radial-gradient(70% 60% at 80% 18%, #000 0%, transparent 72%);
+}
+
+.rk-panel__art::after {
+	content: "";
+	position: absolute;
+	top: -32%;
+	right: -26%;
+	width: 92%;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: repeating-radial-gradient(circle, transparent 0 63px, rgba(255, 255, 255, 0.07) 64px 65px);
+	-webkit-mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+	mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+}
+
+.rk-panel__content {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	max-width: 520px;
+}
+
+.rk-panel__eyebrow {
+	color: var(--rk-panel-muted);
+	font-size: 12.5px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.rk-panel__headline {
+	max-width: 15ch;
+	color: var(--rk-panel-fg);
+	font-size: clamp(30px, 2.5vw, 42px);
+	font-weight: 500;
+	line-height: 1.12;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+}
+
+.rk-panel__apps {
+	display: grid;
+	gap: 10px;
+	margin-top: 14px;
+	padding: 0;
+	list-style: none;
+}
+
+.rk-panel__app {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 14px 16px;
+	border: 1px solid var(--rk-panel-line);
+	border-radius: 16px;
+	background: var(--rk-panel-tile);
+	-webkit-backdrop-filter: blur(6px);
+	backdrop-filter: blur(6px);
+}
+
+.rk-panel__app.is-current {
+	border-color: rgba(255, 255, 255, 0.22);
+	background: rgba(255, 255, 255, 0.07);
+}
+
+.rk-panel__app-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 11px;
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--rk-panel-fg);
+}
+
+.rk-panel__app.is-current .rk-panel__app-icon {
+	background: var(--rk-panel-fg);
+	color: var(--rk-panel);
+}
+
+.rk-panel__app-icon svg {
+	width: 19px;
+	height: 19px;
+}
+
+.rk-panel__app-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.rk-panel__app-title {
+	color: var(--rk-panel-fg);
+	font-size: 15px;
+	font-weight: 550;
+}
+
+.rk-panel__app-description {
+	color: var(--rk-panel-muted);
+	font-size: 13.5px;
+}
+
+/* After a successful sign-in login.js replaces the page with Frappe's splash. */
+
+body.rk-auth-page > .splash {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 28px;
+	background: var(--rk-bg);
+}
+
+body.rk-auth-page > .splash img {
+	width: auto !important;
+	max-width: 240px !important;
+	height: 44px !important;
+	padding: var(--rk-plate-pad);
+	border-radius: 10px;
+	background: var(--rk-plate);
+	object-fit: contain;
+}
+
+body.rk-auth-page > .splash::after {
+	content: "";
+	width: 132px;
+	height: 3px;
+	border-radius: 3px;
+	background: linear-gradient(90deg, var(--rk-line) 0%, var(--rk-fg) 50%, var(--rk-line) 100%);
+	background-size: 200% 100%;
+	animation: rk-progress 1.1s linear infinite;
+}
+
+/* Frappe's request overlay: keep it as a click guard, never as a dark flash. */
+body.rk-auth-page #freeze {
+	background: transparent !important;
+	opacity: 0 !important;
+}
+
+/* Motion */
+
+@media (prefers-reduced-motion: no-preference) {
+	.rk-auth .rk-view {
+		animation: rk-view-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+	}
+
+	.rk-auth .invalid-login {
+		animation: rk-shake 0.4s ease-in-out;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	body.rk-auth-page > .splash::after {
+		animation: none;
+		background: var(--rk-line);
+	}
+}
+
+@keyframes rk-view-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes rk-shake {
+	0%,
+	100% {
+		transform: translateX(0);
+	}
+
+	20% {
+		transform: translateX(-4px);
+	}
+
+	40% {
+		transform: translateX(4px);
+	}
+
+	60% {
+		transform: translateX(-3px);
+	}
+
+	80% {
+		transform: translateX(3px);
+	}
+}
+
+@keyframes rk-progress {
+	from {
+		background-position: 100% 0;
+	}
+
+	to {
+		background-position: -100% 0;
+	}
+}

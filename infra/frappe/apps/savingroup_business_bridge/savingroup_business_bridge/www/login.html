@@ -1,0 +1,207 @@
+{#- The site's sign-in page. It keeps the sections, form classes and field ids of
+    Frappe's own login.html because Frappe's login.js (included below) still
+    sends every request and owns routing, errors and two-factor prompts. -#}
+{% extends "savingroup_business_bridge/templates/savingroup_auth/shell.html" %}
+{% import "savingroup_business_bridge/templates/savingroup_auth/macros.html" as rk with context %}
+
+{% macro email_login_body() -%}
+{%- if not disable_user_pass_login or (ldap_settings and ldap_settings.enabled) %}
+<div class="page-card-body rk-fields">
+	{{ rk.banner("error") }}
+	<div class="form-group rk-field">
+		<label class="rk-label" for="login_email">{{ login_label or _("Email") }}</label>
+		<div class="email-field">
+			<input type="text" id="login_email" class="rk-input" name="username"
+				{%- if not login_label or login_label == _("Email") %} inputmode="email" placeholder="{{ _('name@company.com') }}"{% endif %}
+				required autofocus autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
+				aria-describedby="login_email_error">
+		</div>
+		<p class="field-error" id="login_email_error"></p>
+	</div>
+	<div class="form-group rk-field">
+		<div class="rk-label-row">
+			<label class="rk-label" for="login_password">{{ _("Password") }}</label>
+			{%- if not disable_user_pass_login %}
+			<a href="#forgot" class="rk-link rk-link--muted">{{ _("Forgot password?") }}</a>
+			{%- endif %}
+		</div>
+		<div class="password-field rk-password">
+			<input type="password" id="login_password" class="rk-input rk-input--secret" name="password"
+				required autocomplete="current-password" aria-describedby="login_password_error login_password_caps">
+			{{ rk.reveal("#login_password") }}
+		</div>
+		<p class="field-error" id="login_password_error"></p>
+		{{ rk.caps_hint("login_password_caps") }}
+	</div>
+</div>
+{%- endif %}
+<div class="page-card-actions rk-actions">
+	{%- if not disable_user_pass_login %}
+	<button class="es-button rk-btn rk-btn--primary" data-variant="solid" type="submit">{{ _("Sign in") }}</button>
+	{%- endif %}
+	{%- if ldap_settings and ldap_settings.enabled %}
+	<button class="es-button rk-btn rk-btn--primary btn-ldap-login" data-variant="solid"
+		type="{{ 'submit' if disable_user_pass_login else 'button' }}">{{ _("Sign in with LDAP") }}</button>
+	{%- endif %}
+	{%- if (login_with_email_link or social_login) and not disable_user_pass_login %}
+	<div class="rk-divider" role="separator"><span>{{ _("or") }}</span></div>
+	{%- endif %}
+	{%- if login_with_email_link %}
+	<a href="#login-with-email-link" class="es-button rk-btn rk-btn--secondary btn-login-option btn-login-with-email-link">
+		{{- rk.icon("mail") }}<span>{{ _("Email me a sign-in link") }}</span></a>
+	{%- endif %}
+	{%- if social_login %}
+	{%- for provider in provider_logins %}
+	<a href="{{ provider.auth_url }}" class="es-button rk-btn rk-btn--secondary btn-login-option btn-{{ provider.name }}">
+		{%- if provider.icon %}<span class="rk-provider-icon">{{ provider.icon }}</span>{% endif -%}
+		<span>{{ _("Continue with {0}").format(provider.provider_name | e) }}</span></a>
+	{%- endfor %}
+	{%- endif %}
+</div>
+{%- endmacro %}
+
+{% block rk_body %}
+<!-- {{ for_test }} -->
+<noscript>
+	<div class="rk-card rk-head">
+		<h1 class="rk-title">{{ _("Javascript is disabled on your browser") }}</h1>
+		<p class="rk-subtitle">{{ _("You need to enable JavaScript for your app to work.") }}</p>
+	</div>
+</noscript>
+
+<section class="for-login rk-view">
+	<div class="login-content page-card rk-card">
+		{{ rk.head(_("Sign in"), rk_subtitle | e) }}
+		<form class="form-signin form-login rk-form" role="form" novalidate>
+			{{ email_login_body() }}
+		</form>
+		{%- if not disable_user_pass_login %}
+		<p class="rk-switch">
+			{{ _("New to {0}?").format(rk_org | e) }}
+			<a href="#signup" class="rk-link">{{ _("Get access") if disable_signup else _("Create an account") }}</a>
+		</p>
+		{%- endif %}
+	</div>
+</section>
+
+<section class="for-signup rk-view{% if disable_signup %} signup-disabled{% endif %}">
+	<div class="login-content page-card rk-card">
+	{%- if not disable_signup %}
+		{{ rk.head(_("Create your account"), _("We'll email you a link to confirm your address and choose a password.")) }}
+		{%- if rk_custom_signup_form %}
+		{{ signup_form_template }}
+		{%- else %}
+		<form class="form-signin form-signup hide rk-form" role="form" novalidate>
+			<div class="page-card-body rk-fields">
+				{{ rk.banner("success") }}
+				{{ rk.banner("error") }}
+				<div class="form-group rk-field">
+					<label class="rk-label" for="signup_fullname">{{ _("Full name") }}</label>
+					<input type="text" id="signup_fullname" class="rk-input" name="name" placeholder="{{ _('Jane Doe') }}"
+						required autocomplete="name" aria-describedby="signup_fullname_error">
+					<p class="field-error" id="signup_fullname_error"></p>
+				</div>
+				<div class="form-group rk-field">
+					<label class="rk-label" for="signup_email">{{ _("Email") }}</label>
+					<input type="email" id="signup_email" class="rk-input" name="email" inputmode="email"
+						placeholder="{{ _('name@company.com') }}" required autocomplete="email"
+						autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="signup_email_error">
+					<p class="field-error" id="signup_email_error"></p>
+				</div>
+			</div>
+			<div class="page-card-actions rk-actions">
+				<button class="es-button rk-btn rk-btn--primary btn-signup" data-variant="solid" type="submit" disabled>
+					{{- _("Create Account") -}}
+				</button>
+			</div>
+		</form>
+		{%- endif %}
+		<p class="rk-switch">{{ _("Already have an account?") }} <a href="#login" class="rk-link">{{ _("Sign in") }}</a></p>
+	{%- else %}
+		{{ rk.head(
+			_("Accounts are by invitation"),
+			_("Ask a {0} administrator to invite you. The invitation email has a link to set your password.").format(rk_org | e),
+			"user-plus"
+		) }}
+		<div class="rk-actions">
+			<a href="#login" class="es-button rk-btn rk-btn--secondary">{{ _("Back to sign in") }}</a>
+		</div>
+	{%- endif %}
+	</div>
+</section>
+
+<section class="for-forgot rk-view">
+	<div class="login-content page-card rk-card">
+		{{ rk.head(_("Reset your password"), _("Enter the email you sign in with and we'll send you a link to choose a new password.")) }}
+		<form class="form-signin form-forgot hide rk-form" role="form" novalidate>
+			<div class="page-card-body rk-fields">
+				{{ rk.banner("success") }}
+				{{ rk.banner("error") }}
+				<div class="form-group rk-field">
+					<label class="rk-label" for="forgot_email">{{ _("Email") }}</label>
+					<input type="email" id="forgot_email" class="rk-input" name="email" inputmode="email"
+						placeholder="{{ _('name@company.com') }}" required autocomplete="username"
+						autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="forgot_email_error">
+					<p class="field-error" id="forgot_email_error"></p>
+				</div>
+			</div>
+			<div class="page-card-actions rk-actions">
+				<button class="es-button rk-btn rk-btn--primary btn-forgot" data-variant="solid" type="submit" disabled>
+					{{- _("Send Link") -}}
+				</button>
+			</div>
+		</form>
+		{{ rk.back_link("#login", _("Back to sign in")) }}
+	</div>
+</section>
+
+<section class="for-login-with-email-link rk-view">
+	<div class="login-content page-card rk-card">
+		{{ rk.head(
+			_("Sign in with a link"),
+			_("We'll email you a link that signs you in. It works once and expires in {0} minutes.").format(rk_link_expiry)
+		) }}
+		<form class="form-signin form-login-with-email-link hide rk-form" role="form" novalidate>
+			<div class="page-card-body rk-fields">
+				{{ rk.banner("success", _("Check your inbox for the sign-in link.")) }}
+				{{ rk.banner("error") }}
+				<div class="form-group rk-field">
+					<label class="rk-label" for="login_with_email_link_email">{{ _("Email") }}</label>
+					<input type="email" id="login_with_email_link_email" class="rk-input" name="email" inputmode="email"
+						placeholder="{{ _('name@company.com') }}" required autocomplete="username"
+						autocapitalize="none" autocorrect="off" spellcheck="false"
+						aria-describedby="login_with_email_link_email_error">
+					<p class="field-error" id="login_with_email_link_email_error"></p>
+				</div>
+			</div>
+			<div class="page-card-actions rk-actions">
+				<p class="resend-link hidden rk-resend">{{ _("Didn't get it?") }} <a href="#" class="btn-resend-link rk-link">{{ _("Resend") }}</a></p>
+				<button class="es-button rk-btn rk-btn--primary btn-login-with-email-link" data-variant="solid" type="submit">
+					{{- _("Send login link") -}}
+				</button>
+			</div>
+		</form>
+		{{ rk.back_link("#login", _("Sign in with password")) }}
+	</div>
+</section>
+
+{#- Markup login.js-driven views borrow (two-step verification). -#}
+<template id="rk-tpl-error-banner">{{ rk.banner("error") }}</template>
+<template id="rk-tpl-verify-badge"><span class="rk-badge">{{ rk.icon("shield-check") }}</span></template>
+<template id="rk-tpl-verify-back">{{ rk.back_link("", _("Back to sign in")) }}</template>
+{% endblock %}
+
+{% block script %}
+<script>
+	// Frappe's login.js throws on a hash it has no view for, and its separate
+	// "#email" view is the same form as sign in here.
+	(function () {
+		var known = ["", "#login", "#steptwo", "#forgot", "#signup", "#login-with-email-link"];
+		if (known.indexOf(window.location.hash) === -1) {
+			history.replaceState(null, "", window.location.pathname + window.location.search);
+		}
+	})();
+</script>
+<script>{% include "templates/includes/login/login.js" %}</script>
+<script>{% include "savingroup_business_bridge/templates/savingroup_auth/login.js" %}</script>
+{% endblock %}

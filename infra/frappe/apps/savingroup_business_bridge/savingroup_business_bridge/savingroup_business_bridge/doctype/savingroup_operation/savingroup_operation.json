@@ -1,0 +1,150 @@
+{
+  "actions": [],
+  "allow_rename": 0,
+  "autoname": "field:operation_id",
+  "creation": "2026-10-18 12:00:00.000000",
+  "doctype": "DocType",
+  "editable_grid": 0,
+  "engine": "InnoDB",
+  "field_order": [
+    "operation_id",
+    "action",
+    "action_version",
+    "status",
+    "column_break_1",
+    "external_doctype",
+    "external_name",
+    "actor_user",
+    "actor_bot",
+    "run_id",
+    "section_break_1",
+    "request",
+    "result",
+    "error_code",
+    "error_message"
+  ],
+  "fields": [
+    {
+      "fieldname": "operation_id",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Operation Id",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "action",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Action",
+      "reqd": 1
+    },
+    {
+      "fieldname": "action_version",
+      "fieldtype": "Int",
+      "label": "Action Version",
+      "default": "1"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "Succeeded\nFailed",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "external_doctype",
+      "fieldtype": "Link",
+      "label": "Document Type",
+      "options": "DocType"
+    },
+    {
+      "fieldname": "external_name",
+      "fieldtype": "Dynamic Link",
+      "label": "Document",
+      "options": "external_doctype"
+    },
+    {
+      "fieldname": "actor_user",
+      "fieldtype": "Data",
+      "label": "Savingroup User"
+    },
+    {
+      "fieldname": "actor_bot",
+      "fieldtype": "Data",
+      "label": "Savingroup Bot"
+    },
+    {
+      "fieldname": "run_id",
+      "fieldtype": "Data",
+      "label": "Savingroup Run"
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break"
+    },
+    {
+      "fieldname": "request",
+      "fieldtype": "Long Text",
+      "label": "Request"
+    },
+    {
+      "fieldname": "result",
+      "fieldtype": "Long Text",
+      "label": "Result"
+    },
+    {
+      "fieldname": "error_code",
+      "fieldtype": "Data",
+      "label": "Error Code"
+    },
+    {
+      "fieldname": "error_message",
+      "fieldtype": "Small Text",
+      "label": "Error Message"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "links": [],
+  "modified": "2026-10-18 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Savingroup Business Bridge",
+  "name": "Savingroup Operation",
+  "naming_rule": "By fieldname",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 0,
+      "email": 0,
+      "export": 1,
+      "print": 0,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 0,
+      "write": 1
+    },
+    {
+      "create": 1,
+      "delete": 0,
+      "email": 0,
+      "export": 0,
+      "print": 0,
+      "read": 1,
+      "report": 0,
+      "role": "Savingroup Gateway",
+      "share": 0,
+      "write": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": [],
+  "track_changes": 0
+}

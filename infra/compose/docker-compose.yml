@@ -1,0 +1,275 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    environment:
+      # USER/PASSWORD/DB apply only on first pgdata init. Keep existing values in
+      # .env, or ALTER ROLE / rename in place. Recreate pgdata only after backup
+      # (or when the volume is disposable); down -v deletes all DB state.
+      POSTGRES_USER: ${POSTGRES_USER:-savingroup}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-savingroup}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-savingroup} -d ${POSTGRES_DB:-savingroup}"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  supervisor:
+    build:
+      context: ../..
+      dockerfile: infra/sandboxes/supervisor/Dockerfile
+    environment:
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-10}
+      DATA_DIR: /data
+      SUPERVISOR_HOST: "0.0.0.0"
+      SUPERVISOR_PORT: "7091"
+      DOCKER_SOCKET: /var/run/docker.sock
+      SAVINGROUP_COMPUTER_IMAGE: savingroup/computer:local
+      SAVINGROUP_COMPUTER_MEMORY: ${SAVINGROUP_COMPUTER_MEMORY:-2g}
+      SAVINGROUP_COMPUTER_CPUS: ${SAVINGROUP_COMPUTER_CPUS:-2}
+      SAVINGROUP_COMPUTER_PIDS_LIMIT: ${SAVINGROUP_COMPUTER_PIDS_LIMIT:-2048}
+      SANDBOX_COMMAND_TIMEOUT_MS: ${SANDBOX_COMMAND_TIMEOUT_MS:-300000}
+      SANDBOX_TEAM_SCREEN_LIMIT: ${SANDBOX_TEAM_SCREEN_LIMIT:-0}
+      SANDBOX_SUPERVISOR_TOKEN: ${SANDBOX_SUPERVISOR_TOKEN:?Set SANDBOX_SUPERVISOR_TOKEN in .env}
+      SANDBOX_SCREEN_NETWORK: isolated
+      SANDBOX_COMPUTER_EGRESS: ${SANDBOX_COMPUTER_EGRESS:-open}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-}
+      AXIOM_TOKEN: ${AXIOM_TOKEN:-}
+      AXIOM_DATASET: ${AXIOM_DATASET:-}
+      AXIOM_EDGE: ${AXIOM_EDGE:-}
+      AXIOM_EDGE_URL: ${AXIOM_EDGE_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../data:/data
+    depends_on:
+      computer:
+        condition: service_completed_successfully
+
+  computer:
+    image: savingroup/computer:local
+    build:
+      context: ../sandboxes/computer
+    command: ["true"]
+    restart: "no"
+
+  data-init:
+    image: ${BUSYBOX_IMAGE:-busybox:1}
+    command: ["chown", "-R", "1000:1000", "/data"]
+    restart: "no"
+    volumes:
+      - ../../data:/data
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/compose/Dockerfile
+    command: ["bash", "-lc", "pnpm --filter @savingroup/db exec prisma migrate deploy && pnpm --filter @savingroup/api start"]
+    env_file:
+      - ../../.env
+    environment:
+      SECRET_STORE: ${SECRET_STORE:-encrypted}
+      INFISICAL_URL: ${INFISICAL_URL:-}
+      INFISICAL_ALLOW_INSECURE_HTTP: ${INFISICAL_ALLOW_INSECURE_HTTP:-false}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT:-}
+      INFISICAL_FOLDER: ${INFISICAL_FOLDER:-}
+      DATABASE_URL: postgres://${POSTGRES_USER:-savingroup}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-savingroup}
+      API_HOST: "0.0.0.0"
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_NAME: ${OIDC_NAME:-SSO}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
+      OIDC_ALLOW_SIGNUP_BYPASS: ${OIDC_ALLOW_SIGNUP_BYPASS:-false}
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+      DATA_DIR: /data
+      SANDBOX_SUPERVISOR_URL: http://supervisor:7091
+      WAKEUP_DRIVER: graphile
+      SANDBOX_PROVIDER: docker
+      MEDIA_GENERATION_PROVIDER: ${MEDIA_GENERATION_PROVIDER:-disabled}
+      MEDIA_GENERATION_BASE_URL: ${MEDIA_GENERATION_BASE_URL:-https://queue.fal.run}
+      MEDIA_GENERATION_API_KEY: ${MEDIA_GENERATION_API_KEY:-}
+      MEDIA_GENERATION_IMAGE_MODEL: ${MEDIA_GENERATION_IMAGE_MODEL:-}
+      MEDIA_GENERATION_VIDEO_MODEL: ${MEDIA_GENERATION_VIDEO_MODEL:-}
+      CLOUD_AGENT_PROVIDER: ${CLOUD_AGENT_PROVIDER:-none}
+      CLOUD_AGENT_SPACE_ID: ${CLOUD_AGENT_SPACE_ID:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-none}
+      LIVEKIT_URL: ${LIVEKIT_URL:-http://livekit:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_SIP_TRUNK_ID: ${LIVEKIT_SIP_TRUNK_ID:-}
+      PHONE_CALL_FROM_NUMBER: ${PHONE_CALL_FROM_NUMBER:-}
+      PHONE_CALL_AGENT_API_URL: ${PHONE_CALL_AGENT_API_URL:-http://api:3100}
+      AGENT_RUNTIME: pi
+      # Optional egress proxy (Mainland / corporate). Empty = unset; either case works.
+      HTTP_PROXY: ${HTTP_PROXY:-${http_proxy:-}}
+      HTTPS_PROXY: ${HTTPS_PROXY:-${https_proxy:-}}
+      NO_PROXY: ${NO_PROXY:-${no_proxy:-}}
+      http_proxy: ${http_proxy:-${HTTP_PROXY:-}}
+      https_proxy: ${https_proxy:-${HTTPS_PROXY:-}}
+      no_proxy: ${no_proxy:-${NO_PROXY:-}}
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ../../data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-init:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/compose/Dockerfile
+    command: ["pnpm", "--filter", "@savingroup/worker", "start"]
+    env_file:
+      - ../../.env
+    environment:
+      SECRET_STORE: ${SECRET_STORE:-encrypted}
+      INFISICAL_URL: ${INFISICAL_URL:-}
+      INFISICAL_ALLOW_INSECURE_HTTP: ${INFISICAL_ALLOW_INSECURE_HTTP:-false}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
+      INFISICAL_ENVIRONMENT: ${INFISICAL_ENVIRONMENT:-}
+      INFISICAL_FOLDER: ${INFISICAL_FOLDER:-}
+      BETTER_AUTH_SECRET: ""
+      OIDC_ISSUER: ""
+      OIDC_CLIENT_ID: ""
+      OIDC_CLIENT_SECRET: ""
+      AUTH_PASSWORD_ENABLED: "true"
+      DATABASE_URL: postgres://${POSTGRES_USER:-savingroup}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-savingroup}
+      DATA_DIR: /data
+      SANDBOX_SUPERVISOR_URL: http://supervisor:7091
+      WAKEUP_DRIVER: graphile
+      SANDBOX_PROVIDER: docker
+      MEDIA_GENERATION_PROVIDER: ${MEDIA_GENERATION_PROVIDER:-disabled}
+      MEDIA_GENERATION_BASE_URL: ${MEDIA_GENERATION_BASE_URL:-https://queue.fal.run}
+      MEDIA_GENERATION_API_KEY: ${MEDIA_GENERATION_API_KEY:-}
+      MEDIA_GENERATION_IMAGE_MODEL: ${MEDIA_GENERATION_IMAGE_MODEL:-}
+      MEDIA_GENERATION_VIDEO_MODEL: ${MEDIA_GENERATION_VIDEO_MODEL:-}
+      CLOUD_AGENT_PROVIDER: ${CLOUD_AGENT_PROVIDER:-none}
+      CLOUD_AGENT_SPACE_ID: ${CLOUD_AGENT_SPACE_ID:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      TELEPHONY_PROVIDER: ${TELEPHONY_PROVIDER:-none}
+      LIVEKIT_URL: ${LIVEKIT_URL:-http://livekit:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_SIP_TRUNK_ID: ${LIVEKIT_SIP_TRUNK_ID:-}
+      PHONE_CALL_FROM_NUMBER: ${PHONE_CALL_FROM_NUMBER:-}
+      PHONE_CALL_AGENT_API_URL: ${PHONE_CALL_AGENT_API_URL:-http://api:3100}
+      SCREEN_PROXY_SECRET: ""
+      AGENT_RUNTIME: pi
+      # Optional egress proxy (Mainland / corporate). Empty = unset; either case works.
+      HTTP_PROXY: ${HTTP_PROXY:-${http_proxy:-}}
+      HTTPS_PROXY: ${HTTPS_PROXY:-${https_proxy:-}}
+      NO_PROXY: ${NO_PROXY:-${no_proxy:-}}
+      http_proxy: ${http_proxy:-${HTTP_PROXY:-}}
+      https_proxy: ${https_proxy:-${HTTPS_PROXY:-}}
+      no_proxy: ${no_proxy:-${NO_PROXY:-}}
+    volumes:
+      - ../../data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-init:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/compose/Dockerfile
+    command: ["pnpm", "--filter", "@savingroup/web", "preview", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      API_PROXY_TARGET: http://api:3100
+      SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
+      SAVINGROUP_HOST: ${SAVINGROUP_HOST:-localhost}
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
+
+  # Phone calls: start with `--profile phone`. See docs/self-host/phone-calls.md.
+  phone-redis:
+    image: redis:7-alpine
+    profiles: [phone]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  livekit:
+    image: livekit/livekit-server:v1.9
+    profiles: [phone]
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+    configs:
+      - source: livekit_config
+        target: /etc/livekit.yaml
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    depends_on:
+      - phone-redis
+
+  livekit-sip:
+    image: livekit/sip:v1.1
+    profiles: [phone]
+    environment:
+      SIP_CONFIG_BODY: |
+        api_key: ${LIVEKIT_API_KEY:-}
+        api_secret: ${LIVEKIT_API_SECRET:-}
+        ws_url: ws://livekit:7880
+        redis:
+          address: phone-redis:6379
+        sip_port: 5060
+        rtp_port: 10000-10100
+        use_external_ip: ${LIVEKIT_SIP_USE_EXTERNAL_IP:-false}
+        nat_1_to_1_ip: ${LIVEKIT_SIP_EXTERNAL_IP:-}
+    ports:
+      - "5060:5060/udp"
+      - "10000-10100:10000-10100/udp"
+    depends_on:
+      - livekit
+      - phone-redis
+
+  phone-agent:
+    build:
+      context: ../..
+      dockerfile: apps/phone-agent/Dockerfile
+    profiles: [phone]
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_AGENT_NAME: ${LIVEKIT_AGENT_NAME:-savingroup-phone}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-}
+      AXIOM_TOKEN: ${AXIOM_TOKEN:-}
+      AXIOM_DATASET: ${AXIOM_DATASET:-}
+      AXIOM_EDGE: ${AXIOM_EDGE:-}
+      AXIOM_EDGE_URL: ${AXIOM_EDGE_URL:-}
+    depends_on:
+      - livekit
+      - api
+
+configs:
+  livekit_config:
+    content: |
+      port: 7880
+      rtc:
+        tcp_port: 7881
+        port_range_start: 50000
+        port_range_end: 50100
+        use_external_ip: false
+      redis:
+        address: phone-redis:6379
+
+volumes:
+  pgdata:

@@ -1,0 +1,12 @@
+{
+  "id": "india-smb",
+  "version": 1,
+  "apps": ["erpnext", "crm", "india_compliance", "savingroup_business_bridge"],
+  "language": "English",
+  "country": "India",
+  "currency": "INR",
+  "timezone": "Asia/Kolkata",
+  "chart_of_accounts": "Standard",
+  "fiscal_year_start_month": 4,
+  "price_list": "Standard Selling"
+}

@@ -1,0 +1,37 @@
+# Savingroup business environment image: the official ERPNext image plus Frappe CRM,
+# India Compliance and the Savingroup bridge app. Everything is pinned: the base by
+# digest, the apps by release tag.
+#
+#   docker build -f infra/frappe/Containerfile -t savingroup/frappe-business:16.51.1 infra/frappe
+ARG ERPNEXT_IMAGE=frappe/erpnext:v16.51.1@sha256:a856e7f65c7bfc9cfa2e74f95b62e11d37190c380d958cbf3bea5d05e2ec9268
+FROM ${ERPNEXT_IMAGE}
+
+ARG CRM_REPO=https://github.com/frappe/crm
+ARG CRM_REF=v1.88.0
+ARG INDIA_COMPLIANCE_REPO=https://github.com/resilient-tech/india-compliance
+ARG INDIA_COMPLIANCE_REF=v16.10.1
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+
+# Apps from pinned tags. Assets are built once, below, for both of them.
+RUN bench get-app --branch "${CRM_REF}" --skip-assets --resolve-deps crm "${CRM_REPO}" \
+ && bench get-app --branch "${INDIA_COMPLIANCE_REF}" --skip-assets --resolve-deps india_compliance "${INDIA_COMPLIANCE_REPO}"
+
+# The base image bakes built assets into ./assets and its entrypoint links
+# sites/assets to it at start. Build the new apps into the same place.
+RUN rm -rf sites/assets && ln -s /home/frappe/frappe-bench/assets sites/assets \
+ && bench build --apps crm,india_compliance --production \
+ && rm -rf apps/crm/node_modules apps/crm/frontend/node_modules apps/india_compliance/node_modules \
+ && rm -rf apps/crm/.git apps/india_compliance/.git ~/.cache/yarn ~/.cache/pip \
+ && ls -la assets
+
+# The bridge app ships with this repository and has no frontend assets, so it
+# comes last: a bridge change only re-runs this layer. apps.txt may lack a
+# final newline, hence the small Python edit instead of a plain append.
+COPY --chown=frappe:frappe apps/savingroup_business_bridge /home/frappe/frappe-bench/apps/savingroup_business_bridge
+RUN env/bin/pip install --no-cache-dir -e apps/savingroup_business_bridge \
+ && python3 -c "import pathlib; p = pathlib.Path('sites/apps.txt'); apps = [a for a in p.read_text().split() if a]; apps.append('savingroup_business_bridge') if 'savingroup_business_bridge' not in apps else None; p.write_text('\n'.join(apps) + '\n')" \
+ && cat sites/apps.txt
+
+# Runtime: same entrypoint and command as the base image (start.sh / gunicorn).

@@ -1,0 +1,103 @@
+{
+  "expo": {
+    "name": "Savingroup",
+    "slug": "savingroup",
+    "owner": "inbox-zero",
+    "scheme": "savingroup",
+    "version": "1.0.5",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#050506"
+        }
+      ],
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false,
+          "microphonePermission": "Savingroup uses the microphone for voice calls with your bots."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "speechRecognitionPermission": "Savingroup turns your speech into messages during voice calls.",
+          "microphonePermission": "Savingroup uses the microphone for voice calls with your bots."
+        }
+      ],
+      "expo-localization",
+      "@react-native-vector-icons/ionicons",
+      "@react-native-vector-icons/material-design-icons",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Savingroup uses your photo library so you can attach images to a bot message.",
+          "cameraPermission": "Savingroup uses the camera so you can attach photos to a bot message.",
+          "microphonePermission": "Savingroup uses the microphone for voice calls with your bots."
+        }
+      ],
+      "expo-sharing",
+      "./plugins/with-worklets-headers",
+      "./plugins/with-scene-lifecycle",
+      "./plugins/with-lan-cleartext"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.savingroup.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "icon": "../../packages/ui-tokens/assets/Savingroup.icon",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Savingroup uses the camera so you can attach photos to a bot message.",
+        "NSPhotoLibraryUsageDescription": "Savingroup uses your photo library so you can attach images to a bot message.",
+        "NSLocalNetworkUsageDescription": "Savingroup connects to a self-hosted Savingroup server on your local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.savingroup.app",
+      "versionCode": 10,
+      "softwareKeyboardLayoutMode": "resize",
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundImage": "./assets/icon-background.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "supportsRTL": true,
+      "eas": {
+        "projectId": "07f7eb04-45e3-47fe-9374-99a2f991131e"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/07f7eb04-45e3-47fe-9374-99a2f991131e"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "generic",
+  "version": 1,
+  "apps": ["erpnext", "crm", "savingroup_business_bridge"],
+  "language": "English",
+  "country": "United States",
+  "currency": "USD",
+  "timezone": "America/New_York",
+  "chart_of_accounts": "Standard",
+  "fiscal_year_start_month": 1,
+  "price_list": "Standard Selling"
+}

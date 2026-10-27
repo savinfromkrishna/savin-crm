@@ -1,0 +1,29 @@
+{
+  "name": "@savingroup/testkit",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. packages/testkit/src"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@savingroup/adapter-kit": "workspace:*",
+    "@savingroup/adapters": "workspace:*",
+    "@savingroup/contracts": "workspace:*",
+    "@savingroup/core": "workspace:*",
+    "@savingroup/db": "workspace:*",
+    "@testcontainers/postgresql": "12.2.1",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/pngjs": "6.0.5",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

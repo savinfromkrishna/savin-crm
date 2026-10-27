@@ -1,0 +1,28 @@
+{
+  "name": "@savingroup/phone-agent",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../scripts/dev-watch.mjs src/index.ts dev",
+    "start": "tsx src/index.ts start",
+    "download-files": "tsx src/index.ts download-files",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --root ../.. apps/phone-agent/src"
+  },
+  "dependencies": {
+    "@livekit/agents": "1.9.3",
+    "@livekit/agents-plugin-silero": "1.9.3",
+    "@livekit/rtc-node": "1.1.0",
+    "@savingroup/core": "workspace:*",
+    "@savingroup/logging": "workspace:*",
+    "mpg123-decoder": "1.0.3",
+    "tsx": "4.23.15",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
