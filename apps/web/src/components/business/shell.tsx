@@ -14,6 +14,7 @@ import {
   Database,
   ExternalLink,
   Factory,
+  Globe,
   Handshake,
   LayoutDashboard,
   PanelLeftClose,
@@ -26,6 +27,7 @@ import {
   StickyNote,
   Target,
   TrendingUp,
+  Truck,
   Users,
   Warehouse,
   X,
@@ -63,6 +65,8 @@ export type CrmSection = (typeof CRM_SECTIONS)[number];
 
 export const ERP_SECTIONS = [
   "overview",
+  "procurement",
+  "logistics",
   "products",
   "inventory",
   "orders",
@@ -72,10 +76,19 @@ export const ERP_SECTIONS = [
 export type ErpSection = (typeof ERP_SECTIONS)[number];
 
 export type BusinessApp = "crm" | "erp";
+type NavItem = {
+  section: string;
+  label: string;
+  category: string;
+  badge?: string;
+  icon: LucideIcon;
+};
+
 type NavGroup = {
   app: BusinessApp;
   label: string;
-  items: { section: string; label: string; icon: LucideIcon }[];
+  subtitle: string;
+  items: NavItem[];
 };
 
 function sectionHref(app: BusinessApp, section: string, params?: Record<string, string>) {
@@ -151,32 +164,139 @@ function useBusinessNav(): NavGroup[] {
     () => [
       {
         app: "crm",
-        label: t`Frappe CRM`,
+        label: t`Revenue OS`,
+        subtitle: t`Autonomous Pipeline & Accounts`,
         items: [
-          { section: "overview", label: t`Dashboard`, icon: LayoutDashboard },
-          { section: "workspace", label: t`Savingroup Desk`, icon: Factory },
-          { section: "leads", label: t`Leads`, icon: Target },
-          { section: "deals", label: t`Deals`, icon: Handshake },
-          { section: "companies", label: t`Organizations`, icon: Building2 },
-          { section: "contacts", label: t`Contacts`, icon: Contact },
-          { section: "activities", label: t`Tasks`, icon: CalendarCheck },
-          { section: "notes", label: t`Notes`, icon: StickyNote },
-          { section: "calls", label: t`Call Logs`, icon: Phone },
-          { section: "operations", label: t`Operations Ledger`, icon: Activity },
-          { section: "analytics", label: t`Analytics`, icon: TrendingUp },
-          { section: "agents", label: t`AI Operators`, icon: Sparkles },
+          {
+            section: "overview",
+            label: t`Revenue Pulse`,
+            category: t`Intelligence`,
+            icon: LayoutDashboard,
+          },
+          {
+            section: "agents",
+            label: t`AI Workforce`,
+            category: t`Intelligence`,
+            badge: "6 Bots",
+            icon: Sparkles,
+          },
+          {
+            section: "analytics",
+            label: t`Forecast & Velocity`,
+            category: t`Intelligence`,
+            icon: TrendingUp,
+          },
+          {
+            section: "leads",
+            label: t`Inbound Leads`,
+            category: t`Pipeline & Accounts`,
+            icon: Target,
+          },
+          {
+            section: "deals",
+            label: t`Active Deals`,
+            category: t`Pipeline & Accounts`,
+            icon: Handshake,
+          },
+          {
+            section: "companies",
+            label: t`Accounts`,
+            category: t`Pipeline & Accounts`,
+            icon: Building2,
+          },
+          {
+            section: "contacts",
+            label: t`Stakeholders`,
+            category: t`Pipeline & Accounts`,
+            icon: Contact,
+          },
+          {
+            section: "activities",
+            label: t`Action Queue`,
+            category: t`Execution & Audit`,
+            icon: CalendarCheck,
+          },
+          {
+            section: "notes",
+            label: t`Deal Memos`,
+            category: t`Execution & Audit`,
+            icon: StickyNote,
+          },
+          {
+            section: "calls",
+            label: t`Call Intelligence`,
+            category: t`Execution & Audit`,
+            icon: Phone,
+          },
+          {
+            section: "operations",
+            label: t`Audit Trail`,
+            category: t`Execution & Audit`,
+            icon: Activity,
+          },
+          {
+            section: "workspace",
+            label: t`Cross-Suite Matrix`,
+            category: t`Execution & Audit`,
+            icon: Factory,
+          },
         ],
       },
       {
         app: "erp",
-        label: t`ERPNext`,
+        label: t`Operations OS`,
+        subtitle: t`Order-to-Cash & Supply Chain`,
         items: [
-          { section: "overview", label: t`Savingroup Workspace`, icon: LayoutDashboard },
-          { section: "products", label: t`Items & Prices`, icon: Boxes },
-          { section: "inventory", label: t`Stock & Bin`, icon: Warehouse },
-          { section: "orders", label: t`Sales Orders`, icon: ShoppingCart },
-          { section: "invoices", label: t`Sales Invoices`, icon: ReceiptText },
-          { section: "compliance", label: t`Gateway & GST`, icon: Database },
+          {
+            section: "overview",
+            label: t`Operations Pulse`,
+            category: t`Order-to-Cash`,
+            icon: LayoutDashboard,
+          },
+          {
+            section: "orders",
+            label: t`Sales Orders`,
+            category: t`Order-to-Cash`,
+            icon: ShoppingCart,
+          },
+          {
+            section: "invoices",
+            label: t`Invoices & AR`,
+            category: t`Order-to-Cash`,
+            icon: ReceiptText,
+          },
+          {
+            section: "procurement",
+            label: t`Procurement & Sourcing`,
+            category: t`Supply Chain`,
+            badge: t`AI RFQ`,
+            icon: Globe,
+          },
+          {
+            section: "logistics",
+            label: t`Container & Truck Planner`,
+            category: t`Supply Chain`,
+            badge: t`CBM`,
+            icon: Truck,
+          },
+          {
+            section: "products",
+            label: t`SKU Catalog & Pricing`,
+            category: t`Supply Chain`,
+            icon: Boxes,
+          },
+          {
+            section: "inventory",
+            label: t`Warehouse & GRN Ledger`,
+            category: t`Supply Chain`,
+            icon: Warehouse,
+          },
+          {
+            section: "compliance",
+            label: t`Financial Controls`,
+            category: t`Governance`,
+            icon: Database,
+          },
         ],
       },
     ],
@@ -293,40 +413,40 @@ export function BusinessPage({
                 )}
               </div>
               {collapsed ? null : (
-                <div className="border-b border-sidebar-border px-2.5 py-2">
-                  <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-0.5">
+                <div className="border-b border-sidebar-border px-2.5 py-2.5">
+                  <div className="grid grid-cols-3 gap-1 rounded-xl border bg-muted/50 p-1">
                     <Link
                       to={crmHref("overview")}
                       className={cn(
-                        "rounded-md py-1 text-center text-[11px] font-medium transition-colors",
-                        app === "crm" && section !== "workspace"
-                          ? "bg-background text-foreground shadow-xs"
+                        "rounded-lg py-1.5 text-center text-[11px] font-semibold transition-all",
+                        app === "crm" && section !== "agents"
+                          ? "bg-background text-foreground shadow-2xs"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      <Trans>CRM</Trans>
+                      <Trans>Revenue</Trans>
                     </Link>
                     <Link
                       to={erpHref("overview")}
                       className={cn(
-                        "rounded-md py-1 text-center text-[11px] font-medium transition-colors",
+                        "rounded-lg py-1.5 text-center text-[11px] font-semibold transition-all",
                         app === "erp"
-                          ? "bg-background text-foreground shadow-xs"
+                          ? "bg-background text-foreground shadow-2xs"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      <Trans>ERPNext</Trans>
+                      <Trans>Operations</Trans>
                     </Link>
                     <Link
-                      to={crmHref("workspace")}
+                      to={crmHref("agents")}
                       className={cn(
-                        "rounded-md py-1 text-center text-[11px] font-medium transition-colors",
-                        app === "crm" && section === "workspace"
-                          ? "bg-background text-foreground shadow-xs"
+                        "rounded-lg py-1.5 text-center text-[11px] font-semibold transition-all",
+                        app === "crm" && section === "agents"
+                          ? "bg-background text-foreground shadow-2xs"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      <Trans>Desk</Trans>
+                      <Trans>AI Fleet</Trans>
                     </Link>
                   </div>
                 </div>
@@ -335,48 +455,124 @@ export function BusinessPage({
                 aria-label={t`Sections`}
                 className="rk-scroll min-h-0 flex-1 overflow-y-auto p-2"
               >
-                {groups.map((entry) => (
-                  <div key={entry.app} className="mb-4 last:mb-0">
-                    <p
-                      className={cn(
-                        "mb-1 px-2.5 pt-1 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase",
-                        collapsed && "px-0 text-center text-[10px]",
-                      )}
-                    >
-                      {entry.label}
-                    </p>
-                    <ul className="space-y-0.5">
-                      {entry.items.map((item) => {
-                        const active = entry.app === app && item.section === section;
-                        const Icon = item.icon;
+                {(() => {
+                  const activeGroup = groups.find((entry) => entry.app === app) ?? groups[0]!;
+                  const secondaryGroup = groups.find((entry) => entry.app !== app);
+                  const categories = Array.from(
+                    new Set(activeGroup.items.map((item) => item.category)),
+                  );
+                  return (
+                    <>
+                      {categories.map((cat) => {
+                        const catItems = activeGroup.items.filter((item) => item.category === cat);
                         return (
-                          <li key={item.section}>
-                            <Link
-                              to={sectionHref(entry.app, item.section)}
-                              aria-current={active ? "page" : undefined}
-                              aria-label={collapsed ? `${entry.label} ${item.label}` : undefined}
-                              title={collapsed ? `${entry.label} · ${item.label}` : undefined}
-                              className={cn(
-                                "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13.5px] outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
-                                collapsed && "justify-center px-0",
-                                active
-                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-2xs"
-                                  : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-                              )}
-                            >
-                              <Icon
-                                className="size-4 shrink-0"
-                                strokeWidth={1.75}
-                                aria-hidden="true"
-                              />
-                              {collapsed ? null : <span className="truncate">{item.label}</span>}
-                            </Link>
-                          </li>
+                          <div key={cat} className="mb-3.5 last:mb-0">
+                            {collapsed ? null : (
+                              <p className="mb-1 px-2.5 pt-1 text-[10px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                                {cat}
+                              </p>
+                            )}
+                            <ul className="space-y-0.5">
+                              {catItems.map((item) => {
+                                const active = item.section === section;
+                                const Icon = item.icon;
+                                return (
+                                  <li key={item.section}>
+                                    <Link
+                                      to={sectionHref(activeGroup.app, item.section)}
+                                      aria-current={active ? "page" : undefined}
+                                      aria-label={
+                                        collapsed ? `${activeGroup.label} ${item.label}` : undefined
+                                      }
+                                      title={
+                                        collapsed
+                                          ? `${activeGroup.label} · ${item.label}`
+                                          : undefined
+                                      }
+                                      className={cn(
+                                        "group relative flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                                        collapsed && "justify-center px-0",
+                                        active
+                                          ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-2xs"
+                                          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      {active && !collapsed ? (
+                                        <span
+                                          aria-hidden="true"
+                                          className="absolute inset-y-1.5 start-0 w-0.5 rounded-full bg-foreground"
+                                        />
+                                      ) : null}
+                                      <Icon
+                                        className="size-4 shrink-0"
+                                        strokeWidth={active ? 2 : 1.75}
+                                        aria-hidden="true"
+                                      />
+                                      {collapsed ? null : (
+                                        <>
+                                          <span className="truncate">{item.label}</span>
+                                          {item.badge ? (
+                                            <span className="ms-auto rounded-full border bg-background/80 px-1.5 py-0.2 font-mono text-[10px] font-medium text-muted-foreground">
+                                              {item.badge}
+                                            </span>
+                                          ) : null}
+                                        </>
+                                      )}
+                                    </Link>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
                         );
                       })}
-                    </ul>
-                  </div>
-                ))}
+                      {secondaryGroup ? (
+                        <div className="mt-4 border-t border-sidebar-border pt-3">
+                          {collapsed ? null : (
+                            <p className="mb-1 px-2.5 text-[10px] font-semibold tracking-wider text-muted-foreground/75 uppercase">
+                              {secondaryGroup.label}
+                            </p>
+                          )}
+                          <ul className="space-y-0.5">
+                            {secondaryGroup.items.slice(0, 4).map((item) => {
+                              const Icon = item.icon;
+                              return (
+                                <li key={`${secondaryGroup.app}-${item.section}`}>
+                                  <Link
+                                    to={sectionHref(secondaryGroup.app, item.section)}
+                                    aria-label={
+                                      collapsed
+                                        ? `${secondaryGroup.label} ${item.label}`
+                                        : undefined
+                                    }
+                                    title={
+                                      collapsed
+                                        ? `${secondaryGroup.label} · ${item.label}`
+                                        : undefined
+                                    }
+                                    className={cn(
+                                      "flex h-7 items-center gap-2.5 rounded-lg px-2.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent/50 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+                                      collapsed && "justify-center px-0",
+                                    )}
+                                  >
+                                    <Icon
+                                      className="size-3.5 shrink-0 opacity-80"
+                                      strokeWidth={1.75}
+                                      aria-hidden="true"
+                                    />
+                                    {collapsed ? null : (
+                                      <span className="truncate">{item.label}</span>
+                                    )}
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 {site ? (
                   <div className="mb-4 last:mb-0">
                     <p
@@ -668,15 +864,22 @@ function CommandPaletteModal({
       {
         id: "action-assistant",
         category: t`Quick Actions`,
-        title: t`Ask AI CRM Operator`,
-        subtitle: t`Run pipeline inspection, draft follow-ups, or qualify leads`,
+        title: t`Ask AI Business Operator`,
+        subtitle: t`Run pipeline inspection, draft follow-ups, qualify leads, or audit inventory`,
         action: onOpenAssistant,
+      },
+      {
+        id: "action-agents",
+        category: t`Quick Actions`,
+        title: t`Open AI Workforce Command Center`,
+        subtitle: t`Dispatch autonomous workflows across your 6 specialist AI agent seats`,
+        href: crmHref("agents"),
       },
       {
         id: "action-desk",
         category: t`Quick Actions`,
-        title: t`Open Savingroup Desk Workspace`,
-        subtitle: t`Unified Frappe CRM + ERPNext Doctype Command Center`,
+        title: t`Open Cross-Suite Architecture Matrix`,
+        subtitle: t`Inspect unified Revenue OS & Operations OS entity schemas and workflows`,
         href: crmHref("workspace"),
       },
     ];
@@ -731,7 +934,7 @@ function CommandPaletteModal({
             onKeyDown={(event) => {
               if (event.key === "Escape") onClose();
             }}
-            placeholder={t`Type a command, doctype, lead, deal, organization, or order…`}
+            placeholder={t`Search commands, leads, deals, accounts, orders, or invoices…`}
             className="h-8 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
           />
           <button
@@ -777,7 +980,7 @@ function CommandPaletteModal({
         </div>
         <div className="flex items-center justify-between border-t bg-muted/30 px-3.5 py-2 text-[11px] text-muted-foreground">
           <span>
-            <Trans>Frappe Awesomebar · Search across CRM & ERPNext</Trans>
+            <Trans>Universal Command Palette · Search across Revenue OS & Operations OS</Trans>
           </span>
           <span>ESC</span>
         </div>

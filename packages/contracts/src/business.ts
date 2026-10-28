@@ -324,8 +324,11 @@ export const BUSINESS_LIST_MAX_LIMIT = 200;
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 200;
 
 export const IdempotencyKeySchema = z.string().trim().min(1).max(IDEMPOTENCY_KEY_MAX_LENGTH);
-/** Mixed into every write input so a retried request can be recognised. */
-export const IdempotentInput = z.object({ idempotencyKey: IdempotencyKeySchema.optional() });
+/** Mixed into every write input so a retried request or bot-attributed action can be recognised. */
+export const IdempotentInput = z.object({
+  idempotencyKey: IdempotencyKeySchema.optional(),
+  actorBotId: Id.optional(),
+});
 
 export const BusinessListLimitSchema = z
   .number()

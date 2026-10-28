@@ -59,12 +59,14 @@ import {
   Target,
   TrendingUp,
   Trophy,
+  Upload,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AskRowButton, orderAssistantBots, useAssistant } from "../components/business/assistant";
+import { CsvExportButton, CsvImportModal } from "../components/business/commercial";
 import {
   BarList,
   ColumnChart,
@@ -79,6 +81,7 @@ import {
 } from "../components/business/dashboard";
 import { FieldRow, FormDialog, FormField, parseMoneyInput } from "../components/business/forms";
 import {
+  AgenticWorkforceCommandCenter,
   FrappeCallsSection,
   FrappeContactWorkspace,
   FrappeDealWorkspace,
@@ -437,29 +440,39 @@ function OverviewSection({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card px-4 py-2.5 shadow-2xs">
         <div className="flex items-center gap-2.5 text-xs">
           <span className="grid size-6 place-items-center rounded-md border bg-muted/60 text-foreground">
-            <LayoutGrid className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <Sparkles className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
           </span>
-          <span className="font-medium text-foreground">
-            <Trans>Frappe CRM v1.88.0 · ERPNext v16.51.1 · savingroup_business_bridge</Trans>
+          <span className="font-semibold text-foreground">
+            <Trans>Revenue OS · Autonomous Pipeline & Account Intelligence</Trans>
           </span>
           <span className="hidden text-muted-foreground md:inline">
-            · <Trans>Click any Lead or Deal for the full 2-pane Frappe CRM workspace</Trans>
+            ·{" "}
+            <Trans>
+              Select any Lead, Deal, or Account to open its 2-pane interactive workspace
+            </Trans>
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            to={crmHref("agents")}
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-accent"
+          >
+            <Sparkles className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <Trans>AI Workforce</Trans>
+          </Link>
           <Link
             to={crmHref("workspace")}
             className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-accent"
           >
             <LayoutGrid className="size-3.5 text-muted-foreground" aria-hidden="true" />
-            <Trans>Savingroup Desk</Trans>
+            <Trans>Cross-Suite Matrix</Trans>
           </Link>
           <Link
             to={crmHref("operations")}
             className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-background px-2.5 text-xs font-medium transition-colors hover:bg-accent"
           >
             <Activity className="size-3.5 text-muted-foreground" aria-hidden="true" />
-            <Trans>Operations Ledger</Trans>
+            <Trans>Audit Trail</Trans>
           </Link>
         </div>
       </div>
@@ -627,10 +640,10 @@ function OverviewSection({
                 className="flex items-center justify-between gap-2 rounded-lg border bg-muted/25 px-2.5 py-2 transition-colors hover:bg-accent"
               >
                 <span className="truncate font-medium">
-                  <Trans>ERPNext Sales Orders & Invoices</Trans>
+                  <Trans>Order-to-Cash & Invoices</Trans>
                 </span>
                 <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                  {lookups.orders.length} SO · {lookups.invoices.length} SINV
+                  {lookups.orders.length} Orders · {lookups.invoices.length} Invoices
                 </span>
               </Link>
             </div>
@@ -1125,6 +1138,7 @@ function CompaniesSection({ lookups, loading, currency, revision, reload, onErro
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useOpenRecord();
   const [creating, setCreating] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
   const [duplicates, setDuplicates] = useState<CompanyDuplicateGroup[] | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const open = openId ? lookups.companies.find((company) => company.id === openId) : undefined;
@@ -1233,6 +1247,25 @@ function CompaniesSection({ lookups, loading, currency, revision, reload, onErro
       <Toolbar
         action={
           <>
+            <CsvExportButton
+              filename="accounts-export.csv"
+              rows={lookups.companies}
+              columns={[
+                { header: "Name", value: (r) => r.name },
+                { header: "Domain", value: (r) => r.domain },
+                { header: "Phone", value: (r) => r.phone },
+                { header: "Contacts", value: (r) => statsByCompany.get(r.id)?.contacts ?? 0 },
+                {
+                  header: "Open Pipeline",
+                  value: (r) => statsByCompany.get(r.id)?.openPipeline ?? 0,
+                },
+                { header: "Notes", value: (r) => r.notes },
+              ]}
+            />
+            <Button variant="outline" size="sm" onClick={() => setImportingCsv(true)}>
+              <Upload className="size-3.5" data-icon="inline-start" aria-hidden="true" />
+              <Trans>Import CSV</Trans>
+            </Button>
             <Button
               variant={duplicates !== null ? "secondary" : "outline"}
               onClick={() => void checkDuplicates()}
@@ -1293,6 +1326,15 @@ function CompaniesSection({ lookups, loading, currency, revision, reload, onErro
         emptyIcon={Building2}
         emptyAction={newCompany}
       />
+      {importingCsv ? (
+        <CsvImportModal
+          entity="companies"
+          bots={lookups.bots}
+          companies={lookups.companies}
+          onClose={() => setImportingCsv(false)}
+          onImported={reload}
+        />
+      ) : null}
       {creating ? (
         <CompanyDialog
           key="new"
@@ -1546,6 +1588,7 @@ function ContactsSection({ lookups, loading, currency, revision, reload, onError
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useOpenRecord();
   const [creating, setCreating] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
   const [duplicates, setDuplicates] = useState<ContactDuplicateGroup[] | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const open = openId ? lookups.contacts.find((contact) => contact.id === openId) : undefined;
@@ -1632,6 +1675,21 @@ function ContactsSection({ lookups, loading, currency, revision, reload, onError
       <Toolbar
         action={
           <>
+            <CsvExportButton
+              filename="contacts-export.csv"
+              rows={lookups.contacts}
+              columns={[
+                { header: "Name", value: (r) => r.name },
+                { header: "Email", value: (r) => r.email },
+                { header: "Phone", value: (r) => r.phone },
+                { header: "Title", value: (r) => r.title },
+                { header: "Company", value: (r) => r.companyName },
+              ]}
+            />
+            <Button variant="outline" size="sm" onClick={() => setImportingCsv(true)}>
+              <Upload className="size-3.5" data-icon="inline-start" aria-hidden="true" />
+              <Trans>Import CSV</Trans>
+            </Button>
             <Button
               variant={duplicates !== null ? "secondary" : "outline"}
               onClick={() => void checkDuplicates()}
@@ -1698,6 +1756,15 @@ function ContactsSection({ lookups, loading, currency, revision, reload, onError
         emptyIcon={Contact}
         emptyAction={newContact}
       />
+      {importingCsv ? (
+        <CsvImportModal
+          entity="contacts"
+          bots={lookups.bots}
+          companies={lookups.companies}
+          onClose={() => setImportingCsv(false)}
+          onImported={reload}
+        />
+      ) : null}
       {creating ? (
         <ContactDialog
           key="new"
@@ -1978,6 +2045,7 @@ function LeadsSection({ lookups, currency, revision, reload, onError }: SectionP
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useOpenRecord();
   const [creating, setCreating] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
   const { value: leads, loading } = useBusinessList(
     () =>
       rpc.crm.leads
@@ -2039,7 +2107,7 @@ function LeadsSection({ lookups, currency, revision, reload, onError }: SectionP
   const columns: Column<CrmLead>[] = [
     {
       key: "lead",
-      header: t`Lead (CRM Lead)`,
+      header: t`Inbound Lead`,
       render: (row) => (
         <PrimaryCell
           refText={`${frappeLeadDocName(row)} · ${row.ref}`}
@@ -2102,6 +2170,23 @@ function LeadsSection({ lookups, currency, revision, reload, onError }: SectionP
       <Toolbar
         action={
           <>
+            <CsvExportButton
+              filename="leads-export.csv"
+              rows={visible}
+              columns={[
+                { header: "Ref", value: (r) => r.ref },
+                { header: "Title", value: (r) => r.title },
+                { header: "Status", value: (r) => r.status },
+                { header: "Company", value: (r) => r.companyName },
+                { header: "Value", value: (r) => r.value },
+                { header: "Source", value: (r) => r.source },
+                { header: "Assignee", value: (r) => actorName(r.assignee) },
+              ]}
+            />
+            <Button variant="outline" size="sm" onClick={() => setImportingCsv(true)}>
+              <Upload className="size-3.5" data-icon="inline-start" aria-hidden="true" />
+              <Trans>Import CSV</Trans>
+            </Button>
             <div className="flex items-center rounded-lg border p-0.5">
               <ViewButton
                 active={view === "list"}
@@ -2159,6 +2244,15 @@ function LeadsSection({ lookups, currency, revision, reload, onError }: SectionP
           emptyAction={newLead}
         />
       )}
+      {importingCsv ? (
+        <CsvImportModal
+          entity="leads"
+          bots={lookups.bots}
+          companies={lookups.companies}
+          onClose={() => setImportingCsv(false)}
+          onImported={reload}
+        />
+      ) : null}
       {creating ? (
         <LeadDialog
           key="new"
@@ -2828,7 +2922,7 @@ function DealsSection({ lookups, currency, revision, reload, onError }: SectionP
   const columns: Column<CrmDeal>[] = [
     {
       key: "deal",
-      header: t`Deal (CRM Deal)`,
+      header: t`Active Deal`,
       render: (row) => (
         <PrimaryCell
           refText={`${frappeDealDocName(row)} · ${row.ref}`}
@@ -2882,6 +2976,20 @@ function DealsSection({ lookups, currency, revision, reload, onError }: SectionP
       <Toolbar
         action={
           <>
+            <CsvExportButton
+              filename="deals-export.csv"
+              rows={visible}
+              columns={[
+                { header: "Ref", value: (r) => r.ref },
+                { header: "Title", value: (r) => r.title },
+                { header: "Stage", value: (r) => r.stage },
+                { header: "Company", value: (r) => r.companyName },
+                { header: "Amount", value: (r) => r.amount },
+                { header: "Currency", value: (r) => r.currency },
+                { header: "Expected Close", value: (r) => r.expectedCloseAt },
+                { header: "Owner", value: (r) => actorName(r.owner) },
+              ]}
+            />
             <div className="flex items-center rounded-lg border p-0.5">
               <ViewButton
                 active={view === "pipeline"}
@@ -4200,7 +4308,7 @@ type OperatorRow = {
   followUpsCount: number;
 };
 
-function AgentsSection({ lookups, currency, revision, onError }: SectionProps) {
+function AgentsSection({ lookups, currency, revision, reload, onError }: SectionProps) {
   const { t } = useLingui();
   const assistant = useAssistant();
   const short = useShortMoney(currency);
@@ -4303,7 +4411,14 @@ function AgentsSection({ lookups, currency, revision, onError }: SectionProps) {
   ];
 
   return (
-    <>
+    <div className="space-y-6">
+      <AgenticWorkforceCommandCenter
+        lookups={lookups}
+        currency={currency}
+        onReload={reload}
+        onError={onError}
+      />
+
       <KpiGrid testId="crm-agents-kpis">
         <KpiCard
           label={t`AI operators`}
@@ -4424,6 +4539,6 @@ function AgentsSection({ lookups, currency, revision, onError }: SectionProps) {
           )}
         </Panel>
       </PanelGrid>
-    </>
+    </div>
   );
 }

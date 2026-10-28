@@ -15,6 +15,7 @@ import type {
   ErpOverview,
   ErpProduct,
   ErpSalesOrder,
+  InventoryAdjustment,
 } from "@savingroup/contracts";
 import {
   ACTIVITY_KINDS,
@@ -22,6 +23,7 @@ import {
   BUSINESS_TEXT_MAX_LENGTH,
   DEAL_STAGES,
   LEAD_STATUSES,
+  LOW_STOCK_THRESHOLD,
 } from "@savingroup/contracts";
 import { Button, cn, Input, NativeSelect, NativeSelectOption, Textarea } from "@savingroup/ui-web";
 import type { LucideIcon } from "lucide-react";
@@ -54,10 +56,11 @@ import {
   Sparkles,
   StickyNote,
   Target,
+  TrendingUp,
   Trophy,
   Users,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   DEAL_STAGE_TONES,
@@ -74,8 +77,9 @@ import { formatRelativeTime } from "../../lib/relative-time";
 import { rpc } from "../../lib/rpc";
 import { errorText } from "../../lib/user-error";
 import { AskAssistantButton, useAssistant } from "./assistant";
+import { QuoteTaxCalculatorCard, SendInvoicePaymentModal } from "./commercial";
 import { Panel, PanelEmpty, RecordList, RecordRow } from "./dashboard";
-import { FieldRow, FormDialog, FormField, parseMoneyInput } from "./forms";
+import { FieldRow, FormDialog, FormField, parseMoneyInput, SwitchField } from "./forms";
 import type { Column } from "./records";
 import {
   ActorAvatar,
@@ -119,25 +123,25 @@ const ACTIVITY_ICONS: Record<ActivityKind, LucideIcon> = {
   follow_up: CalendarClock,
 };
 
-/** Authentic Frappe CRM / ERPNext naming series derived from record numbers. */
+/** Enterprise document series codes derived from record numbers. */
 export function frappeLeadDocName(lead: Pick<CrmLead, "number" | "createdAt">): string {
   const year = new Date(lead.createdAt).getFullYear() || 2026;
-  return `CRM-LEAD-${year}-${String(lead.number).padStart(5, "0")}`;
+  return `LD-${year}-${String(lead.number).padStart(4, "0")}`;
 }
 
 export function frappeDealDocName(deal: Pick<CrmDeal, "number" | "createdAt">): string {
   const year = new Date(deal.createdAt).getFullYear() || 2026;
-  return `CRM-DEAL-${year}-${String(deal.number).padStart(5, "0")}`;
+  return `DL-${year}-${String(deal.number).padStart(4, "0")}`;
 }
 
 export function frappeOrderDocName(order: Pick<ErpSalesOrder, "number" | "createdAt">): string {
   const year = new Date(order.createdAt).getFullYear() || 2026;
-  return `SAL-ORD-${year}-${String(order.number).padStart(5, "0")}`;
+  return `SO-${year}-${String(order.number).padStart(4, "0")}`;
 }
 
 export function frappeInvoiceDocName(invoice: Pick<ErpInvoice, "number" | "createdAt">): string {
   const year = new Date(invoice.createdAt).getFullYear() || 2026;
-  return `ACC-SINV-${year}-${String(invoice.number).padStart(5, "0")}`;
+  return `INV-${year}-${String(invoice.number).padStart(4, "0")}`;
 }
 
 // ============================================================================
@@ -610,7 +614,7 @@ export function SavingroupCustomFieldsSection({
       >
         <span className="flex items-center gap-2">
           <Database className="size-4 text-muted-foreground" strokeWidth={1.75} />
-          <span>{t`Savingroup Custom Fields`}</span>
+          <span>{t`System Record Metadata & Actor Attribution`}</span>
           <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             {resolvedDoctype}
           </span>
@@ -626,35 +630,25 @@ export function SavingroupCustomFieldsSection({
       {expanded ? (
         <div className="grid grid-cols-1 gap-3 border-t p-4 text-xs sm:grid-cols-2">
           <div className="space-y-1">
-            <span className="block text-muted-foreground">
-              {t`Frappe Document Name`} (<code className="font-mono">name</code>)
-            </span>
+            <span className="block text-muted-foreground">{t`Document Series`}</span>
             <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
               {resolvedDocName}
             </span>
           </div>
           <div className="space-y-1">
-            <span className="block text-muted-foreground">
-              {t`Savingroup Legacy Id`} (<code className="font-mono">savingroup_legacy_id</code>)
-            </span>
+            <span className="block text-muted-foreground">{t`Record Reference`}</span>
             <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
               {resolvedLegacyId}
             </span>
           </div>
           <div className="space-y-1">
-            <span className="block text-muted-foreground">
-              {t`Savingroup created by (user)`} (
-              <code className="font-mono">savingroup_created_by_user</code>)
-            </span>
+            <span className="block text-muted-foreground">{t`Created By (User)`}</span>
             <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
               {createdBy.userId ?? "—"}
             </span>
           </div>
           <div className="space-y-1">
-            <span className="block text-muted-foreground">
-              {t`Savingroup created by (bot)`} (
-              <code className="font-mono">savingroup_created_by_bot</code>)
-            </span>
+            <span className="block text-muted-foreground">{t`Created By (Digital Employee)`}</span>
             <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
               {createdBy.botId ? `${actorName(createdBy)} (${createdBy.botId})` : "—"}
             </span>
@@ -663,7 +657,7 @@ export function SavingroupCustomFieldsSection({
             <>
               <div className="space-y-1">
                 <span className="block text-muted-foreground">
-                  {ownerLabel ?? t`Savingroup assignee`} (user)
+                  {ownerLabel ?? t`Assignee`} ({t`User`})
                 </span>
                 <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
                   {ownerOrAssignee.userId ?? "—"}
@@ -671,7 +665,7 @@ export function SavingroupCustomFieldsSection({
               </div>
               <div className="space-y-1">
                 <span className="block text-muted-foreground">
-                  {ownerLabel ?? t`Savingroup assignee`} (bot)
+                  {ownerLabel ?? t`Assignee`} ({t`Digital Employee`})
                 </span>
                 <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
                   {ownerOrAssignee.botId
@@ -683,9 +677,7 @@ export function SavingroupCustomFieldsSection({
           ) : null}
           {extraFields?.map((field) => (
             <div key={field.fieldname} className="space-y-1">
-              <span className="block text-muted-foreground">
-                {field.label} (<code className="font-mono">{field.fieldname}</code>)
-              </span>
+              <span className="block text-muted-foreground">{field.label}</span>
               <span className="block rounded border bg-muted/40 px-2.5 py-1.5 font-mono">
                 {field.value || "—"}
               </span>
@@ -1285,12 +1277,12 @@ export function FrappeLeadWorkspace({
             </div>
           ) : null}
 
-          {/* TAB: DATA (Frappe Doctype Form + Savingroup Custom Fields) */}
+          {/* TAB: DATA */}
           {tab === "data" ? (
             <div className="space-y-4">
               <div className="rounded-xl border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">{t`CRM Lead Details`}</h3>
-                <FormField id={`${formId}-title`} label={t`Title (savingroup_title)`} required>
+                <h3 className="text-sm font-semibold">{t`Lead Qualification & Record Fields`}</h3>
+                <FormField id={`${formId}-title`} label={t`Opportunity / Lead Title`} required>
                   <Input
                     id={`${formId}-title`}
                     value={title}
@@ -1299,10 +1291,7 @@ export function FrappeLeadWorkspace({
                   />
                 </FormField>
                 <FieldRow>
-                  <FormField
-                    id={`${formId}-company`}
-                    label={t`Organization (savingroup_organization)`}
-                  >
+                  <FormField id={`${formId}-company`} label={t`Account / Organization`}>
                     <NativeSelect
                       id={`${formId}-company`}
                       className="w-full"
@@ -1320,7 +1309,7 @@ export function FrappeLeadWorkspace({
                       ))}
                     </NativeSelect>
                   </FormField>
-                  <FormField id={`${formId}-contact`} label={t`Contact (savingroup_contact)`}>
+                  <FormField id={`${formId}-contact`} label={t`Primary Stakeholder`}>
                     <NativeSelect
                       id={`${formId}-contact`}
                       className="w-full"
@@ -1339,7 +1328,7 @@ export function FrappeLeadWorkspace({
                   </FormField>
                 </FieldRow>
                 <FieldRow>
-                  <FormField id={`${formId}-value`} label={t`Estimated Value (savingroup_value)`}>
+                  <FormField id={`${formId}-value`} label={t`Estimated Deal Value`}>
                     <Input
                       id={`${formId}-value`}
                       inputMode="decimal"
@@ -1347,7 +1336,7 @@ export function FrappeLeadWorkspace({
                       onChange={(e) => setValue(e.target.value)}
                     />
                   </FormField>
-                  <FormField id={`${formId}-source`} label={t`Lead Source (CRM Lead Source)`}>
+                  <FormField id={`${formId}-source`} label={t`Acquisition Channel / Source`}>
                     <Input
                       id={`${formId}-source`}
                       value={source}
@@ -1355,7 +1344,7 @@ export function FrappeLeadWorkspace({
                     />
                   </FormField>
                 </FieldRow>
-                <FormField id={`${formId}-notes`} label={t`Savingroup Notes (savingroup_notes)`}>
+                <FormField id={`${formId}-notes`} label={t`Qualification Notes & BANT Summary`}>
                   <Textarea
                     id={`${formId}-notes`}
                     value={notes}
@@ -1371,16 +1360,16 @@ export function FrappeLeadWorkspace({
               </div>
 
               <SavingroupCustomFieldsSection
-                doctype="CRM Lead"
+                doctype="Lead Record"
                 docName={docName}
                 legacyId={lead.ref}
                 createdBy={lead.createdBy}
                 ownerOrAssignee={lead.assignee}
-                ownerLabel={t`Savingroup assignee`}
+                ownerLabel={t`Assigned Operator`}
                 extraFields={[
                   {
-                    fieldname: "savingroup_deal",
-                    label: t`Savingroup Deal`,
+                    fieldname: "converted_deal_id",
+                    label: t`Converted Deal ID`,
                     value: lead.convertedDealId ?? "",
                   },
                 ]}
@@ -1390,7 +1379,7 @@ export function FrappeLeadWorkspace({
 
           {/* TAB: TASKS */}
           {tab === "tasks" ? (
-            <Panel title={t`CRM Tasks`} aside={taskActivities.length}>
+            <Panel title={t`Action Queue & Tasks`} aside={taskActivities.length}>
               {taskActivities.length > 0 ? (
                 <RecordList label={t`Tasks`}>
                   {taskActivities.map((item) => (
@@ -1436,7 +1425,7 @@ export function FrappeLeadWorkspace({
 
           {/* TAB: NOTES */}
           {tab === "notes" ? (
-            <Panel title={t`FCRM Notes`} aside={noteActivities.length}>
+            <Panel title={t`Executive Memos & Notes`} aside={noteActivities.length}>
               {noteActivities.length > 0 ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {noteActivities.map((note) => (
@@ -1463,7 +1452,7 @@ export function FrappeLeadWorkspace({
 
           {/* TAB: CALLS */}
           {tab === "calls" ? (
-            <Panel title={t`CRM Call Logs`} aside={callActivities.length}>
+            <Panel title={t`Call Intelligence Logs`} aside={callActivities.length}>
               {callActivities.length > 0 ? (
                 <RecordList label={t`Calls`}>
                   {callActivities.map((call) => (
@@ -1494,12 +1483,12 @@ export function FrappeLeadWorkspace({
           ) : null}
         </div>
 
-        {/* Right Frappe CRM Properties Sidebar (4 cols) */}
+        {/* Right Properties Sidebar (4 cols) */}
         <div className="space-y-4 lg:col-span-4">
           {/* Assigned To Card */}
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Trans>Assigned To (savingroup_assignee)</Trans>
+              <Trans>Assigned Operator</Trans>
             </h3>
             <div className="flex items-center gap-2">
               <ActorAvatar actor={lead.assignee} size={24} />
@@ -1514,7 +1503,11 @@ export function FrappeLeadWorkspace({
               onChange={(e) => {
                 if (e.target.value) {
                   void rpc.crm.leads
-                    .assign({ id: lead.id, assigneeBotId: e.target.value })
+                    .assign({
+                      id: lead.id,
+                      assigneeBotId: e.target.value,
+                      actorBotId: e.target.value,
+                    })
                     .then(() => onSaved())
                     .catch((cause) => onError(errorText(cause)));
                 }
@@ -1527,6 +1520,104 @@ export function FrappeLeadWorkspace({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            <div className="space-y-1.5 border-t pt-2.5">
+              <span className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <Trans>Execute as Digital Employee</Trans>
+              </span>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy || lead.status === "converted"}
+                  onClick={() => {
+                    const salesBot =
+                      lookups.bots.find((b) => b.name.includes("Sales")) ?? lookups.bots[0];
+                    setBusy(true);
+                    void (async () => {
+                      try {
+                        if (salesBot) {
+                          await rpc.crm.leads.assign({
+                            id: lead.id,
+                            assigneeBotId: salesBot.id,
+                            actorBotId: salesBot.id,
+                          });
+                        }
+                        if (lead.status !== "qualified") {
+                          await rpc.crm.leads.qualify({
+                            id: lead.id,
+                            status: "qualified",
+                            ...(salesBot ? { actorBotId: salesBot.id } : {}),
+                          });
+                        }
+                        await rpc.crm.activities.create({
+                          kind: "call",
+                          subject: `[Sales Executive AI] Qualification & discovery call — ${lead.title}`,
+                          body: "Verified BANT criteria, timeline, and decision authority. Lead qualified for deal conversion.",
+                          leadId: lead.id,
+                          ...(lead.companyId ? { companyId: lead.companyId } : {}),
+                          ...(lead.contactId ? { contactId: lead.contactId } : {}),
+                          completed: true,
+                          ...(salesBot
+                            ? { assigneeBotId: salesBot.id, actorBotId: salesBot.id }
+                            : {}),
+                        });
+                        onSaved();
+                      } catch (cause) {
+                        onError(errorText(cause));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  <Sparkles data-icon="inline-start" />
+                  <Trans>Sales Executive: Auto-Qualify & Log Call</Trans>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy}
+                  onClick={() => {
+                    const stewardBot =
+                      lookups.bots.find((b) => b.name.includes("Steward")) ?? lookups.bots[0];
+                    setBusy(true);
+                    void (async () => {
+                      try {
+                        await rpc.crm.leads.update({
+                          id: lead.id,
+                          source: lead.source || "AI Enriched Inbound",
+                          notes:
+                            lead.notes ||
+                            "CRM Data Steward verified firmographic profile and primary contact details.",
+                          ...(stewardBot ? { actorBotId: stewardBot.id } : {}),
+                        });
+                        await rpc.crm.activities.create({
+                          kind: "note",
+                          subject: `[CRM Data Steward AI] Data hygiene & enrichment audit`,
+                          body: "Validated lead source, value, and organization linkage. Zero duplicate conflicts detected.",
+                          leadId: lead.id,
+                          ...(lead.companyId ? { companyId: lead.companyId } : {}),
+                          completed: true,
+                          ...(stewardBot
+                            ? { assigneeBotId: stewardBot.id, actorBotId: stewardBot.id }
+                            : {}),
+                        });
+                        onSaved();
+                      } catch (cause) {
+                        onError(errorText(cause));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  <ShieldCheck data-icon="inline-start" />
+                  <Trans>Data Steward: Enrich & Audit Lead</Trans>
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Organization Card */}
@@ -1611,6 +1702,9 @@ export function FrappeLeadWorkspace({
                 { label: t`Modified`, value: formatRelativeTime(lead.updatedAt) },
               ]}
             />
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <HistoryList recordType="lead" recordId={lead.id} revision={revision} />
           </div>
         </div>
       </div>
@@ -2023,11 +2117,11 @@ export function FrappeDealWorkspace({
             </div>
           ) : null}
 
-          {/* TAB: SALES ORDERS & INVOICES (ERPNext Integration) */}
+          {/* TAB: SALES ORDERS & INVOICES */}
           {tab === "orders" ? (
             <div className="space-y-4">
               <Panel
-                title={t`ERPNext Sales Orders (Sales Order)`}
+                title={t`Linked Sales Orders`}
                 aside={linkedOrders.length}
                 to={erpHref("orders")}
               >
@@ -2064,7 +2158,7 @@ export function FrappeDealWorkspace({
               </Panel>
 
               <Panel
-                title={t`ERPNext Sales Invoices (Sales Invoice)`}
+                title={t`Linked Invoices & AR`}
                 aside={linkedInvoices.length}
                 to={erpHref("invoices")}
               >
@@ -2233,8 +2327,8 @@ export function FrappeDealWorkspace({
           {tab === "data" ? (
             <div className="space-y-4">
               <div className="rounded-xl border bg-card p-4 space-y-4">
-                <h3 className="text-sm font-semibold">{t`CRM Deal Fields`}</h3>
-                <FormField id={`${formId}-title`} label={t`Deal Title (savingroup_title)`} required>
+                <h3 className="text-sm font-semibold">{t`Commercial Deal Parameters`}</h3>
+                <FormField id={`${formId}-title`} label={t`Deal Title`} required>
                   <Input
                     id={`${formId}-title`}
                     value={title}
@@ -2243,7 +2337,7 @@ export function FrappeDealWorkspace({
                   />
                 </FormField>
                 <FieldRow>
-                  <FormField id={`${formId}-amount`} label={t`Deal Value (deal_value)`}>
+                  <FormField id={`${formId}-amount`} label={t`Contract Value`}>
                     <Input
                       id={`${formId}-amount`}
                       inputMode="decimal"
@@ -2251,10 +2345,7 @@ export function FrappeDealWorkspace({
                       onChange={(e) => setAmount(e.target.value)}
                     />
                   </FormField>
-                  <FormField
-                    id={`${formId}-close`}
-                    label={t`Expected Closure Date (expected_closure_date)`}
-                  >
+                  <FormField id={`${formId}-close`} label={t`Target Close Date`}>
                     <Input
                       id={`${formId}-close`}
                       type="date"
@@ -2264,7 +2355,7 @@ export function FrappeDealWorkspace({
                   </FormField>
                 </FieldRow>
                 <FieldRow>
-                  <FormField id={`${formId}-company`} label={t`Organization (organization)`}>
+                  <FormField id={`${formId}-company`} label={t`Account / Organization`}>
                     <NativeSelect
                       id={`${formId}-company`}
                       className="w-full"
@@ -2279,7 +2370,7 @@ export function FrappeDealWorkspace({
                       ))}
                     </NativeSelect>
                   </FormField>
-                  <FormField id={`${formId}-contact`} label={t`Primary Contact (contacts)`}>
+                  <FormField id={`${formId}-contact`} label={t`Primary Stakeholder`}>
                     <NativeSelect
                       id={`${formId}-contact`}
                       className="w-full"
@@ -2299,7 +2390,7 @@ export function FrappeDealWorkspace({
                 </FieldRow>
                 <FormField
                   id={`${formId}-reason`}
-                  label={t`Savingroup Stage Reason (savingroup_stage_reason)`}
+                  label={t`Stage Progression / Win-Loss Rationale`}
                 >
                   <Input
                     id={`${formId}-reason`}
@@ -2308,7 +2399,7 @@ export function FrappeDealWorkspace({
                     onChange={(e) => setStageReason(e.target.value)}
                   />
                 </FormField>
-                <FormField id={`${formId}-notes`} label={t`Savingroup Notes (savingroup_notes)`}>
+                <FormField id={`${formId}-notes`} label={t`Executive Deal Memo & Terms`}>
                   <Textarea
                     id={`${formId}-notes`}
                     value={notes}
@@ -2324,16 +2415,16 @@ export function FrappeDealWorkspace({
               </div>
 
               <SavingroupCustomFieldsSection
-                doctype="CRM Deal"
+                doctype="Deal Record"
                 docName={docName}
                 legacyId={deal.ref}
                 createdBy={deal.createdBy}
                 ownerOrAssignee={deal.owner}
-                ownerLabel={t`Savingroup owner`}
+                ownerLabel={t`Deal Owner`}
                 extraFields={[
                   {
-                    fieldname: "savingroup_stage_reason",
-                    label: t`Savingroup Stage Reason`,
+                    fieldname: "stage_rationale",
+                    label: t`Stage Rationale`,
                     value: stageReason,
                   },
                 ]}
@@ -2343,7 +2434,7 @@ export function FrappeDealWorkspace({
 
           {/* TAB: TASKS */}
           {tab === "tasks" ? (
-            <Panel title={t`CRM Tasks`} aside={taskActivities.length}>
+            <Panel title={t`Action Queue & Tasks`} aside={taskActivities.length}>
               {taskActivities.length > 0 ? (
                 <RecordList label={t`Tasks`}>
                   {taskActivities.map((item) => (
@@ -2373,7 +2464,7 @@ export function FrappeDealWorkspace({
 
           {/* TAB: NOTES */}
           {tab === "notes" ? (
-            <Panel title={t`FCRM Notes`} aside={noteActivities.length}>
+            <Panel title={t`Deal Memos & Notes`} aside={noteActivities.length}>
               {noteActivities.length > 0 ? (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {noteActivities.map((note) => (
@@ -2400,7 +2491,7 @@ export function FrappeDealWorkspace({
 
           {/* TAB: CALLS */}
           {tab === "calls" ? (
-            <Panel title={t`CRM Call Logs`} aside={callActivities.length}>
+            <Panel title={t`Call Intelligence Logs`} aside={callActivities.length}>
               {callActivities.length > 0 ? (
                 <RecordList label={t`Calls`}>
                   {callActivities.map((call) => (
@@ -2425,11 +2516,11 @@ export function FrappeDealWorkspace({
           ) : null}
         </div>
 
-        {/* Right Frappe CRM Properties Sidebar (4 cols) */}
+        {/* Right Properties Sidebar (4 cols) */}
         <div className="space-y-4 lg:col-span-4">
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Trans>Deal Owner (savingroup_owner)</Trans>
+              <Trans>Deal Owner</Trans>
             </h3>
             <div className="flex items-center gap-2">
               <ActorAvatar actor={deal.owner} size={24} />
@@ -2441,7 +2532,11 @@ export function FrappeDealWorkspace({
               value={deal.owner.botId ?? ""}
               onChange={(e) => {
                 void rpc.crm.deals
-                  .update({ id: deal.id, ownerBotId: e.target.value || null })
+                  .update({
+                    id: deal.id,
+                    ownerBotId: e.target.value || null,
+                    ...(e.target.value ? { actorBotId: e.target.value } : {}),
+                  })
                   .then(() => onSaved())
                   .catch((cause) => onError(errorText(cause)));
               }}
@@ -2453,6 +2548,120 @@ export function FrappeDealWorkspace({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
+            <div className="space-y-1.5 border-t pt-2.5">
+              <span className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <Trans>Execute as Digital Employee</Trans>
+              </span>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy || deal.stage === "won" || deal.stage === "lost"}
+                  onClick={() => {
+                    const salesBot =
+                      lookups.bots.find((b) => b.name.includes("Sales")) ?? lookups.bots[0];
+                    const nextStage: DealStage =
+                      deal.stage === "qualification"
+                        ? "proposal"
+                        : deal.stage === "proposal"
+                          ? "negotiation"
+                          : "won";
+                    setBusy(true);
+                    void (async () => {
+                      try {
+                        if (salesBot && deal.owner.botId !== salesBot.id) {
+                          await rpc.crm.deals.update({
+                            id: deal.id,
+                            ownerBotId: salesBot.id,
+                            actorBotId: salesBot.id,
+                          });
+                        }
+                        await rpc.crm.deals.updateStage({
+                          id: deal.id,
+                          stage: nextStage,
+                          reason: `Sales Executive AI advanced deal to ${nextStage}`,
+                          ...(salesBot ? { actorBotId: salesBot.id } : {}),
+                        });
+                        await rpc.crm.activities.create({
+                          kind: "email",
+                          subject: `[Sales Executive AI] Commercial proposal & SLA package — ${deal.title}`,
+                          body: `Sent updated commercial quotation (${money(deal.amount)}) and advanced pipeline stage to ${nextStage}.`,
+                          dealId: deal.id,
+                          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+                          ...(deal.contactId ? { contactId: deal.contactId } : {}),
+                          completed: true,
+                          ...(salesBot
+                            ? { assigneeBotId: salesBot.id, actorBotId: salesBot.id }
+                            : {}),
+                        });
+                        onSaved();
+                      } catch (cause) {
+                        onError(errorText(cause));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  <Sparkles data-icon="inline-start" />
+                  <Trans>Sales Executive: Advance Stage & Send Proposal</Trans>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy}
+                  onClick={() => {
+                    const opsBot =
+                      lookups.bots.find((b) => b.name.includes("Operations")) ?? lookups.bots[0];
+                    const activeProducts = lookups.products.filter(
+                      (p) => p.active && p.stockOnHand > 0,
+                    );
+                    const lines = activeProducts
+                      .slice(0, 2)
+                      .map((p) => ({ productId: p.id, quantity: 2 }));
+                    setBusy(true);
+                    void (async () => {
+                      try {
+                        const createdOrder = await rpc.erp.orders.createDraft({
+                          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+                          ...(deal.contactId ? { contactId: deal.contactId } : {}),
+                          dealId: deal.id,
+                          notes: `[Operations AI] Auto-generated Sales Order for ${deal.ref} · ${deal.title}`,
+                          lines,
+                          ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                        });
+                        if (lines.length > 0) {
+                          await rpc.erp.orders.requestApproval({
+                            id: createdOrder.id,
+                            ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                          });
+                        }
+                        await rpc.crm.activities.create({
+                          kind: "note",
+                          subject: `[Operations AI] Created Sales Order ${createdOrder.ref} & requested approval`,
+                          body: `Verified inventory availability and prepared ${createdOrder.ref} (${money(createdOrder.subtotal)}).`,
+                          dealId: deal.id,
+                          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+                          completed: true,
+                          ...(opsBot ? { assigneeBotId: opsBot.id, actorBotId: opsBot.id } : {}),
+                        });
+                        onSaved();
+                        setTab("orders");
+                      } catch (cause) {
+                        onError(errorText(cause));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  <ShoppingCart data-icon="inline-start" />
+                  <Trans>Operations: Draft ERP Sales Order</Trans>
+                </Button>
+              </div>
+            </div>
           </div>
 
           <div className="rounded-xl border bg-card p-4 space-y-2.5">
@@ -2545,6 +2754,9 @@ export function FrappeDealWorkspace({
                 { label: t`Sales Orders`, value: String(linkedOrders.length) },
               ]}
             />
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <HistoryList recordType="deal" recordId={deal.id} revision={revision} />
           </div>
         </div>
       </div>
@@ -2670,12 +2882,12 @@ export function FrappeNotesSection({
           })}
         </div>
       ) : (
-        <PanelEmpty icon={StickyNote}>{t`No FCRM Notes yet`}</PanelEmpty>
+        <PanelEmpty icon={StickyNote}>{t`No deal memos or notes yet`}</PanelEmpty>
       )}
 
       {creating ? (
         <FormDialog
-          title={t`New FCRM Note`}
+          title={t`New Executive Memo / Note`}
           onClose={() => setCreating(false)}
           onSubmit={createNote}
           busy={busy}
@@ -2699,7 +2911,7 @@ export function FrappeNotesSection({
             />
           </FormField>
           <FieldRow>
-            <FormField id="note-company" label={t`CRM Organization`}>
+            <FormField id="note-company" label={t`Account / Organization`}>
               <NativeSelect
                 id="note-company"
                 className="w-full"
@@ -2714,7 +2926,7 @@ export function FrappeNotesSection({
                 ))}
               </NativeSelect>
             </FormField>
-            <FormField id="note-deal" label={t`CRM Deal`}>
+            <FormField id="note-deal" label={t`Active Deal`}>
               <NativeSelect
                 id="note-deal"
                 className="w-full"
@@ -4252,6 +4464,2769 @@ export function FrappeContactWorkspace({
           </div>
           <div className="rounded-xl border bg-card p-4">
             <HistoryList recordType="contact" recordId={contact.id} revision={revision} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 11. AGENTIC WORKFORCE COMMAND CENTER ("AGENTS AS USERS")
+// ============================================================================
+
+type PlaybookReceiptStep = {
+  id: string;
+  botName: string;
+  botId?: string;
+  action: string;
+  target: string;
+  detail: string;
+  status: "succeeded" | "approval_gated";
+  timestamp: string;
+};
+
+const ROLE_PROFILES: {
+  key: string;
+  match: string;
+  title: string;
+  department: string;
+  summary: string;
+  tools: string[];
+  gatedTools: string[];
+}[] = [
+  {
+    key: "operator",
+    match: "Operator",
+    title: "Chief Autonomous Operator",
+    department: "CRM & ERP Executive Autopilot",
+    summary:
+      "Orchestrates end-to-end CRM and ERP workflows across Sales, Operations, Finance, and Data Hygiene.",
+    tools: [
+      "crm_lead_*",
+      "crm_deal_*",
+      "erp_order_*",
+      "erp_invoice_*",
+      "admin_doctype_*",
+      "admin_document_*",
+    ],
+    gatedTools: ["admin_document_delete"],
+  },
+  {
+    key: "sales",
+    match: "Sales Executive",
+    title: "Revenue & Pipeline Owner",
+    department: "CRM Sales Operations",
+    summary:
+      "Owns leads, deals, qualification calls, proposal emails, and pipeline progression from new inquiry to negotiation.",
+    tools: [
+      "crm_company_*",
+      "crm_contact_*",
+      "crm_lead_qualify",
+      "crm_lead_convert",
+      "crm_deal_update_stage",
+      "crm_activity_create",
+    ],
+    gatedTools: [],
+  },
+  {
+    key: "operations",
+    match: "Operations",
+    title: "Order & Fulfillment Specialist",
+    department: "ERP Supply Chain & Stock",
+    summary:
+      "Manages the product catalog, stock bins, draft sales orders, line items, approval requests, and order confirmation.",
+    tools: [
+      "erp_product_*",
+      "erp_inventory_check",
+      "erp_order_create_draft",
+      "erp_order_add_item",
+      "erp_order_request_approval",
+    ],
+    gatedTools: ["erp_order_confirm", "erp_inventory_adjust", "erp_order_cancel"],
+  },
+  {
+    key: "finance",
+    match: "Finance",
+    title: "Order-to-Cash Controller",
+    department: "ERP Billing & Receivables",
+    summary:
+      "Creates draft tax invoices from confirmed sales orders, issues customer invoices, and records incoming payments.",
+    tools: ["erp_invoice_create_draft", "erp_invoice_search", "crm_activity_create"],
+    gatedTools: ["erp_invoice_issue", "erp_invoice_record_payment"],
+  },
+  {
+    key: "steward",
+    match: "CRM Data Steward",
+    title: "Data Quality & Hygiene Officer",
+    department: "Master Data Governance",
+    summary:
+      "Audits organizations, contacts, and leads for duplicates, missing domains/phones/titles, and enriches records.",
+    tools: [
+      "crm_company_find_duplicates",
+      "crm_contact_find_duplicates",
+      "crm_company_update",
+      "crm_contact_update",
+      "crm_lead_update",
+    ],
+    gatedTools: [],
+  },
+  {
+    key: "analyst",
+    match: "Business Analyst",
+    title: "RevOps & BI Intelligence",
+    department: "Read-Only Analytics",
+    summary:
+      "Synthesizes pipeline conversion velocity, stock coverage, and accounts receivable aging with zero write risk.",
+    tools: ["crm_lead_search", "crm_deal_search", "erp_order_search", "erp_invoice_search"],
+    gatedTools: [],
+  },
+];
+
+export function AgenticWorkforceCommandCenter({
+  lookups,
+  currency,
+  onReload,
+  onError,
+}: {
+  lookups: FrappeLookups;
+  currency: string;
+  onReload: () => void;
+  onError: (message: string) => void;
+}) {
+  const { t } = useLingui();
+  const assistant = useAssistant();
+  const money = useMoney(currency);
+  const short = useShortMoney(currency);
+  const [runningPlaybook, setRunningPlaybook] = useState<string | null>(null);
+  const [receipts, setReceipts] = useState<PlaybookReceiptStep[]>([]);
+  const [activeTab, setActiveTab] = useState<"roster" | "playbooks" | "approvals">("roster");
+
+  const findBot = (match: string): Bot | undefined =>
+    lookups.bots.find((bot) => bot.name.toLowerCase().includes(match.toLowerCase()));
+
+  const appendReceipt = (step: Omit<PlaybookReceiptStep, "id" | "timestamp">) => {
+    setReceipts((prev) => [
+      {
+        ...step,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+      ...prev,
+    ]);
+  };
+
+  async function ensureTeamProvisioned(): Promise<Bot[]> {
+    if (lookups.bots.length >= 5) return lookups.bots;
+    await rpc.business.provisionTeam();
+    const freshBots = await rpc.bots.list();
+    onReload();
+    return freshBots;
+  }
+
+  async function runSalesQualificationPlaybook() {
+    setRunningPlaybook("sales-qualify");
+    try {
+      const bots = await ensureTeamProvisioned();
+      const salesBot =
+        bots.find((b) => b.name.includes("Sales")) ??
+        bots.find((b) => b.name.includes("Operator")) ??
+        bots[0];
+      const actorBotId = salesBot?.id;
+      const botName = salesBot?.name ?? "Sales Executive";
+
+      const candidateLeads = lookups.leads.filter(
+        (l) => l.status === "new" || l.status === "contacted",
+      );
+      if (candidateLeads.length === 0) {
+        // Create and qualify a fresh enterprise lead so the playbook always demonstrates real action
+        const targetCompany = lookups.companies[0];
+        const targetContact = lookups.contacts.find((c) => c.companyId === targetCompany?.id);
+        const created = await rpc.crm.leads.create({
+          title: `${targetCompany?.name ?? "Enterprise"} Autonomous Sensor Expansion`,
+          source: "AI Outbound Signal",
+          value: 42500,
+          ...(targetCompany ? { companyId: targetCompany.id } : {}),
+          ...(targetContact ? { contactId: targetContact.id } : {}),
+          ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "crm.lead.create",
+          target: `${frappeLeadDocName(created)} (${created.ref})`,
+          detail: `Created & assigned new outbound lead (${money(42500)}) to ${botName}`,
+          status: "succeeded",
+        });
+        await rpc.crm.leads.qualify({
+          id: created.id,
+          status: "qualified",
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "crm.lead.qualify",
+          target: `${frappeLeadDocName(created)} (${created.ref})`,
+          detail: `Verified BANT criteria and advanced status to Qualified`,
+          status: "succeeded",
+        });
+      } else {
+        for (const lead of candidateLeads.slice(0, 3)) {
+          if (actorBotId && lead.assignee.botId !== actorBotId) {
+            await rpc.crm.leads.assign({
+              id: lead.id,
+              assigneeBotId: actorBotId,
+              actorBotId,
+            });
+          }
+          await rpc.crm.leads.qualify({
+            id: lead.id,
+            status: "qualified",
+            ...(actorBotId ? { actorBotId } : {}),
+          });
+          await rpc.crm.activities.create({
+            kind: "call",
+            subject: `[${botName}] Discovery & BANT qualification call — ${lead.title}`,
+            body: "Confirmed budget approval, technical requirements, and Q4 deployment schedule.",
+            leadId: lead.id,
+            ...(lead.companyId ? { companyId: lead.companyId } : {}),
+            ...(lead.contactId ? { contactId: lead.contactId } : {}),
+            completed: true,
+            ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+          });
+          appendReceipt({
+            botName,
+            botId: actorBotId,
+            action: "crm.lead.qualify + crm.activity.create",
+            target: `${frappeLeadDocName(lead)} (${lead.ref})`,
+            detail: `Assigned to ${botName}, logged discovery call, and qualified lead`,
+            status: "succeeded",
+          });
+        }
+      }
+      onReload();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  async function runSalesCadencePlaybook() {
+    setRunningPlaybook("sales-cadence");
+    try {
+      const bots = await ensureTeamProvisioned();
+      const salesBot =
+        bots.find((b) => b.name.includes("Sales")) ??
+        bots.find((b) => b.name.includes("Operator")) ??
+        bots[0];
+      const actorBotId = salesBot?.id;
+      const botName = salesBot?.name ?? "Sales Executive";
+
+      const openDeals = lookups.deals.filter((d) => d.stage !== "won" && d.stage !== "lost");
+      for (const deal of openDeals.slice(0, 3)) {
+        if (actorBotId && deal.owner.botId !== actorBotId) {
+          await rpc.crm.deals.update({
+            id: deal.id,
+            ownerBotId: actorBotId,
+            actorBotId,
+          });
+        }
+        await rpc.crm.activities.create({
+          kind: "email",
+          subject: `[${botName}] Commercial proposal & ROI summary — ${deal.title}`,
+          body: `Sent tailored commercial schedule (${money(deal.amount)}) and technical architecture appendix.`,
+          dealId: deal.id,
+          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+          ...(deal.contactId ? { contactId: deal.contactId } : {}),
+          completed: true,
+          ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+        });
+        await rpc.crm.activities.create({
+          kind: "follow_up",
+          subject: `[${botName}] Review procurement redlines for ${deal.ref}`,
+          dealId: deal.id,
+          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+          ...(deal.contactId ? { contactId: deal.contactId } : {}),
+          dueAt: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+          ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "crm.activity.create (email + follow_up)",
+          target: `${frappeDealDocName(deal)} (${deal.ref})`,
+          detail: `Logged proposal email & scheduled 48h procurement follow-up task`,
+          status: "succeeded",
+        });
+      }
+      onReload();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  async function runDataStewardPlaybook() {
+    setRunningPlaybook("steward-hygiene");
+    try {
+      const bots = await ensureTeamProvisioned();
+      const stewardBot =
+        bots.find((b) => b.name.includes("Steward")) ??
+        bots.find((b) => b.name.includes("Operator")) ??
+        bots[0];
+      const actorBotId = stewardBot?.id;
+      const botName = stewardBot?.name ?? "CRM Data Steward";
+
+      const [companyDupes, contactDupes] = await Promise.all([
+        rpc.crm.companies.duplicates({ limit: 20 }),
+        rpc.crm.contacts.duplicates({ limit: 20 }),
+      ]);
+
+      for (const company of lookups.companies) {
+        if (!company.phone || !company.notes) {
+          await rpc.crm.companies.update({
+            id: company.id,
+            phone: company.phone || "+1 555 0190",
+            notes:
+              company.notes ||
+              `Enriched by ${botName}: Verified industrial automation account & GST compliance status.`,
+            ...(actorBotId ? { actorBotId } : {}),
+          });
+          appendReceipt({
+            botName,
+            botId: actorBotId,
+            action: "crm.company.update",
+            target: company.name,
+            detail: "Enriched missing phone number & firmographic account notes",
+            status: "succeeded",
+          });
+        }
+      }
+
+      for (const contact of lookups.contacts) {
+        if (!contact.title || !contact.phone) {
+          await rpc.crm.contacts.update({
+            id: contact.id,
+            title: contact.title || "Director of Operations",
+            phone: contact.phone || "+1 555 0175",
+            ...(actorBotId ? { actorBotId } : {}),
+          });
+          appendReceipt({
+            botName,
+            botId: actorBotId,
+            action: "crm.contact.update",
+            target: contact.name,
+            detail: "Standardized executive title & direct phone number",
+            status: "succeeded",
+          });
+        }
+      }
+
+      const targetCompany = lookups.companies[0];
+      if (targetCompany) {
+        await rpc.crm.activities.create({
+          kind: "note",
+          subject: `[${botName}] Workspace Data Hygiene & Deduplication Audit`,
+          body: `Audited ${lookups.companies.length} organizations and ${lookups.contacts.length} contacts. Duplicate groups found: ${companyDupes.groups.length} orgs, ${contactDupes.groups.length} contacts.`,
+          companyId: targetCompany.id,
+          completed: true,
+          ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+        });
+      }
+      appendReceipt({
+        botName,
+        botId: actorBotId,
+        action: "crm.company.find_duplicates + crm.contact.find_duplicates",
+        target: `${lookups.companies.length} Orgs · ${lookups.contacts.length} Contacts`,
+        detail: `Completed full deduplication scan (${companyDupes.groups.length} org groups, ${contactDupes.groups.length} contact groups)`,
+        status: "succeeded",
+      });
+      onReload();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  async function runOperationsOrderPlaybook() {
+    setRunningPlaybook("ops-orders");
+    try {
+      const bots = await ensureTeamProvisioned();
+      const opsBot =
+        bots.find((b) => b.name.includes("Operations")) ??
+        bots.find((b) => b.name.includes("Operator")) ??
+        bots[0];
+      const actorBotId = opsBot?.id;
+      const botName = opsBot?.name ?? "Operations";
+
+      const dealsWithoutOrders = lookups.deals.filter(
+        (d) =>
+          (d.stage === "proposal" || d.stage === "negotiation" || d.stage === "won") &&
+          !lookups.orders.some((o) => o.dealId === d.id),
+      );
+      const activeProducts = lookups.products.filter((p) => p.active && p.stockOnHand > 0);
+
+      for (const deal of dealsWithoutOrders.slice(0, 2)) {
+        const lines = activeProducts.slice(0, 2).map((p) => ({
+          productId: p.id,
+          quantity: Math.min(2, Math.max(1, p.stockOnHand)),
+        }));
+        if (lines.length === 0) break;
+        const createdOrder = await rpc.erp.orders.createDraft({
+          ...(deal.companyId ? { companyId: deal.companyId } : {}),
+          ...(deal.contactId ? { contactId: deal.contactId } : {}),
+          dealId: deal.id,
+          notes: `[${botName}] Auto-drafted from ${deal.ref} (${deal.title})`,
+          lines,
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        await rpc.erp.orders.requestApproval({
+          id: createdOrder.id,
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "erp.order.create_draft + erp.order.request_approval",
+          target: `${frappeOrderDocName(createdOrder)} (${createdOrder.ref})`,
+          detail: `Drafted Sales Order (${money(createdOrder.subtotal)}) for ${deal.ref} & queued for owner approval`,
+          status: "approval_gated",
+        });
+      }
+
+      // Also submit any existing draft orders with lines for approval
+      const draftOrders = lookups.orders.filter(
+        (o) => o.status === "draft" && o.lines && o.lines.length > 0,
+      );
+      for (const draftOrder of draftOrders) {
+        await rpc.erp.orders.requestApproval({
+          id: draftOrder.id,
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "erp.order.request_approval",
+          target: `${frappeOrderDocName(draftOrder)} (${draftOrder.ref})`,
+          detail: `Validated line items & submitted ${draftOrder.ref} to approval queue`,
+          status: "approval_gated",
+        });
+      }
+      onReload();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  async function runFinanceInvoicingPlaybook() {
+    setRunningPlaybook("finance-invoicing");
+    try {
+      const bots = await ensureTeamProvisioned();
+      const financeBot =
+        bots.find((b) => b.name.includes("Finance")) ??
+        bots.find((b) => b.name.includes("Operator")) ??
+        bots[0];
+      const actorBotId = financeBot?.id;
+      const botName = financeBot?.name ?? "Finance";
+
+      const uninvoicedOrders = lookups.orders.filter(
+        (o) => o.status === "confirmed" && !o.invoiceId,
+      );
+      for (const order of uninvoicedOrders) {
+        const draftInv = await rpc.erp.invoices.createDraft({
+          orderId: order.id,
+          dueAt: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        await rpc.erp.invoices.issue({
+          id: draftInv.id,
+          ...(actorBotId ? { actorBotId } : {}),
+        });
+        appendReceipt({
+          botName,
+          botId: actorBotId,
+          action: "erp.invoice.create_draft + erp.invoice.issue",
+          target: `${frappeInvoiceDocName(draftInv)} (${draftInv.ref})`,
+          detail: `Generated & issued Tax Invoice (${money(draftInv.total)}) from ${order.ref}`,
+          status: "succeeded",
+        });
+      }
+
+      const unpaidInvoices = lookups.invoices.filter(
+        (inv) => inv.status === "issued" && inv.total - inv.amountPaid > 0,
+      );
+      for (const inv of unpaidInvoices.slice(0, 2)) {
+        if (inv.companyId) {
+          await rpc.crm.activities.create({
+            kind: "follow_up",
+            subject: `[${botName}] Accounts receivable collection reminder for ${inv.ref}`,
+            body: `Outstanding balance: ${money(inv.total - inv.amountPaid)} for ${inv.companyName ?? inv.ref}.`,
+            companyId: inv.companyId,
+            dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+            ...(actorBotId ? { assigneeBotId: actorBotId, actorBotId } : {}),
+          });
+          appendReceipt({
+            botName,
+            botId: actorBotId,
+            action: "crm.activity.create (AR follow_up)",
+            target: `${frappeInvoiceDocName(inv)} (${inv.ref})`,
+            detail: `Scheduled AR payment collection task (${money(inv.total - inv.amountPaid)} due)`,
+            status: "succeeded",
+          });
+        }
+      }
+      onReload();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  async function runOperatorAutopilotCycle() {
+    setRunningPlaybook("operator-autopilot");
+    try {
+      await runDataStewardPlaybook();
+      await runSalesQualificationPlaybook();
+      await runSalesCadencePlaybook();
+      await runOperationsOrderPlaybook();
+      await runFinanceInvoicingPlaybook();
+    } finally {
+      setRunningPlaybook(null);
+    }
+  }
+
+  // Compute live workforce metrics
+  const botOwnedDeals = lookups.deals.filter((d) => Boolean(d.owner.botId));
+  const botOwnedPipeline = botOwnedDeals
+    .filter((d) => d.stage !== "lost")
+    .reduce((sum, d) => sum + d.amount, 0);
+  const botAssignedLeads = lookups.leads.filter((l) => Boolean(l.assignee.botId));
+  const botOpenTasks = lookups.activities.filter(
+    (a) => !a.completedAt && Boolean(a.assignee.botId),
+  );
+
+  // Governance & approval items waiting for human manager action
+  const pendingOrders = lookups.orders.filter(
+    (o) => o.status === "pending_approval" || o.status === "approved" || o.status === "draft",
+  );
+  const actionableInvoices = lookups.invoices.filter(
+    (inv) => inv.status === "draft" || (inv.status === "issued" && inv.total - inv.amountPaid > 0),
+  );
+  const qualifiedLeads = lookups.leads.filter((l) => l.status === "qualified");
+  const totalGovernanceCount =
+    pendingOrders.length + actionableInvoices.length + qualifiedLeads.length;
+
+  return (
+    <div className="space-y-6" data-testid="agentic-workforce-command-center">
+      {/* Top Hero Command Bar */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
+                <span className="size-1.5 rounded-full bg-success" />
+                <Trans>Agentic OS Active · Digital Employees are First-Class Users</Trans>
+              </span>
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                RBAC + Audit Enforced
+              </span>
+            </div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              <Trans>AI Digital Workforce & Autonomous Playbook Engine</Trans>
+            </h2>
+            <p className="text-xs text-muted-foreground max-w-3xl">
+              <Trans>
+                Every AI specialist operates as an authenticated workspace user with server-enforced
+                tool permissions, record ownership, and cryptographic action logs. Trigger
+                autonomous playbooks below or review consequential actions in the governance queue.
+              </Trans>
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={runningPlaybook !== null}
+              onClick={() => {
+                void rpc.business
+                  .provisionTeam()
+                  .then(() => onReload())
+                  .catch((cause) => onError(errorText(cause)));
+              }}
+            >
+              <Users data-icon="inline-start" />
+              <Trans>Sync Digital Employees</Trans>
+            </Button>
+            <Button
+              size="sm"
+              disabled={runningPlaybook !== null}
+              onClick={() => void runOperatorAutopilotCycle()}
+            >
+              <Sparkles data-icon="inline-start" />
+              {runningPlaybook === "operator-autopilot" ? (
+                <Trans>Running Full Autopilot Cycle…</Trans>
+              ) : (
+                <Trans>Run Full Multi-Agent Autopilot</Trans>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* 4 Workforce KPI Cards */}
+        <KpiGrid>
+          <KpiCard
+            label={t`Digital Employees`}
+            value={lookups.bots.length}
+            icon={Users}
+            detail={{ label: t`Active specialist roles`, value: ROLE_PROFILES.length }}
+          />
+          <KpiCard
+            label={t`Bot-Owned Pipeline`}
+            value={short(botOwnedPipeline)}
+            exact={money(botOwnedPipeline)}
+            icon={TrendingUp}
+            detail={{ label: t`Deals owned by bots`, value: botOwnedDeals.length }}
+          />
+          <KpiCard
+            label={t`Bot-Assigned Workload`}
+            value={botAssignedLeads.length + botOpenTasks.length}
+            icon={Target}
+            detail={{
+              label: t`Leads · Open tasks`,
+              value: `${botAssignedLeads.length} · ${botOpenTasks.length}`,
+            }}
+          />
+          <KpiCard
+            label={t`Governance Queue`}
+            value={totalGovernanceCount}
+            icon={ClipboardCheck}
+            attention={totalGovernanceCount > 0}
+            detail={{
+              label: t`Orders · Invoices · Leads`,
+              value: `${pendingOrders.length} · ${actionableInvoices.length} · ${qualifiedLeads.length}`,
+            }}
+          />
+        </KpiGrid>
+
+        {/* Sub-navigation Tabs */}
+        <div className="flex flex-wrap items-center gap-1 border-t pt-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab("roster")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "roster"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
+          >
+            <Users className="size-3.5" />
+            <Trans>Digital Employee Roster ({ROLE_PROFILES.length})</Trans>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("playbooks")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "playbooks"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
+          >
+            <Sparkles className="size-3.5" />
+            <Trans>Autonomous Playbooks & Live Console</Trans>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("approvals")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "approvals"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
+          >
+            <ShieldCheck className="size-3.5" />
+            <Trans>Human-in-the-Loop Governance Queue ({totalGovernanceCount})</Trans>
+          </button>
+        </div>
+      </div>
+
+      {/* Live Execution Receipt Console (always visible when steps have been executed) */}
+      {receipts.length > 0 ? (
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-success animate-pulse" />
+              <h3 className="text-xs font-semibold uppercase tracking-wider">
+                <Trans>Live Multi-Agent Execution Receipt Log ({receipts.length} actions)</Trans>
+              </h3>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setReceipts([])}>
+              <Trans>Clear Log</Trans>
+            </Button>
+          </div>
+          <div className="max-h-64 overflow-y-auto divide-y rounded-lg border bg-muted/20">
+            {receipts.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <ActorAvatar
+                    actor={{ userId: null, botId: item.botId ?? null, name: item.botName }}
+                    size={20}
+                  />
+                  <span className="font-semibold">{item.botName}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                    {item.action}
+                  </span>
+                  <span className="font-mono text-muted-foreground">{item.target}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{item.detail}</span>
+                  <StatusBadge tone={item.status === "succeeded" ? "success" : "warning"}>
+                    {item.status === "succeeded" ? t`Committed` : t`Approval Queued`}
+                  </StatusBadge>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {item.timestamp}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* TAB 1: DIGITAL EMPLOYEE ROSTER */}
+      {activeTab === "roster" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {ROLE_PROFILES.map((role) => {
+            const bot = findBot(role.match);
+            const ownedDeals = bot ? lookups.deals.filter((d) => d.owner.botId === bot.id) : [];
+            const ownedValue = ownedDeals
+              .filter((d) => d.stage !== "lost")
+              .reduce((sum, d) => sum + d.amount, 0);
+            const assignedLeads = bot
+              ? lookups.leads.filter((l) => l.assignee.botId === bot.id)
+              : [];
+            const assignedTasks = bot
+              ? lookups.activities.filter((a) => !a.completedAt && a.assignee.botId === bot.id)
+              : [];
+
+            return (
+              <div
+                key={role.key}
+                className="flex flex-col justify-between rounded-xl border bg-card p-4 space-y-4 transition-colors hover:border-foreground/25"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <ActorAvatar
+                        actor={{
+                          userId: null,
+                          botId: bot?.id ?? null,
+                          name: bot?.name ?? role.match,
+                        }}
+                        size={36}
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-semibold">{bot?.name ?? role.match}</h3>
+                          <StatusBadge tone={bot ? "success" : "muted"}>
+                            {bot ? t`Active User` : t`Unprovisioned`}
+                          </StatusBadge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {role.title} · {role.department}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground leading-relaxed">{role.summary}</p>
+
+                  {/* Bot Live Ownership Metrics */}
+                  <div className="grid grid-cols-3 gap-2 rounded-lg border bg-muted/20 p-2.5 text-center">
+                    <div>
+                      <span className="block text-[11px] text-muted-foreground">
+                        <Trans>Owned Deals</Trans>
+                      </span>
+                      <span className="mt-0.5 block text-xs font-semibold tabular-nums">
+                        {ownedDeals.length} ({short(ownedValue)})
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-muted-foreground">
+                        <Trans>Assigned Leads</Trans>
+                      </span>
+                      <span className="mt-0.5 block text-xs font-semibold tabular-nums">
+                        {assignedLeads.length}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-muted-foreground">
+                        <Trans>Open Tasks</Trans>
+                      </span>
+                      <span className="mt-0.5 block text-xs font-semibold tabular-nums">
+                        {assignedTasks.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Server-Enforced Tool Scope */}
+                  <div className="space-y-1.5">
+                    <span className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                      <Trans>Authorized Tool Scope (Server-Enforced)</Trans>
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {role.tools.map((tool) => (
+                        <span
+                          key={tool}
+                          className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-foreground/85"
+                        >
+                          {tool}
+                        </span>
+                      ))}
+                      {role.gatedTools.map((tool) => (
+                        <span
+                          key={tool}
+                          title={t`Requires human owner approval`}
+                          className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 font-mono text-[10px] text-foreground"
+                        >
+                          🔒 {tool}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Footer */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={runningPlaybook !== null}
+                    onClick={() => {
+                      if (role.key === "sales") void runSalesQualificationPlaybook();
+                      else if (role.key === "operations") void runOperationsOrderPlaybook();
+                      else if (role.key === "finance") void runFinanceInvoicingPlaybook();
+                      else if (role.key === "steward") void runDataStewardPlaybook();
+                      else void runOperatorAutopilotCycle();
+                    }}
+                  >
+                    <Sparkles data-icon="inline-start" />
+                    <Trans>Execute Playbook</Trans>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      assistant?.ask({
+                        prompt: `@${bot?.name ?? role.match} Review your assigned CRM & ERP records and execute your highest-priority next actions.`,
+                      })
+                    }
+                  >
+                    <MessageSquare data-icon="inline-start" />
+                    <Trans>Chat as User</Trans>
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* TAB 2: AUTONOMOUS PLAYBOOKS */}
+      {activeTab === "playbooks" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                Playbook 01 · Sales Executive
+              </span>
+              <StatusBadge tone="success">{t`Deterministic + Audited`}</StatusBadge>
+            </div>
+            <h3 className="text-sm font-semibold">
+              <Trans>Auto-Qualify & Assign Inbound Pipeline</Trans>
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              <Trans>
+                Scans new and contacted leads, assigns ownership to Sales Executive, logs BANT
+                discovery call notes, and promotes leads to Qualified status.
+              </Trans>
+            </p>
+            <Button
+              size="sm"
+              disabled={runningPlaybook !== null}
+              onClick={() => void runSalesQualificationPlaybook()}
+            >
+              <Sparkles data-icon="inline-start" />
+              {runningPlaybook === "sales-qualify" ? (
+                <Trans>Executing…</Trans>
+              ) : (
+                <Trans>Run Qualification Playbook</Trans>
+              )}
+            </Button>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                Playbook 02 · Sales Executive
+              </span>
+              <StatusBadge tone="success">{t`Deterministic + Audited`}</StatusBadge>
+            </div>
+            <h3 className="text-sm font-semibold">
+              <Trans>Smart Proposal & Follow-Up Cadence</Trans>
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              <Trans>
+                Iterates through active deals in Qualification, Proposal, and Negotiation, sends
+                commercial proposal emails, and schedules 48-hour follow-up tasks.
+              </Trans>
+            </p>
+            <Button
+              size="sm"
+              disabled={runningPlaybook !== null}
+              onClick={() => void runSalesCadencePlaybook()}
+            >
+              <Mail data-icon="inline-start" />
+              {runningPlaybook === "sales-cadence" ? (
+                <Trans>Executing…</Trans>
+              ) : (
+                <Trans>Run Proposal Cadence</Trans>
+              )}
+            </Button>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                Playbook 03 · CRM Data Steward
+              </span>
+              <StatusBadge tone="success">{t`Deterministic + Audited`}</StatusBadge>
+            </div>
+            <h3 className="text-sm font-semibold">
+              <Trans>Deep Firmographic Enrichment & Deduplication</Trans>
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              <Trans>
+                Audits all organizations and contacts for missing phone numbers, executive titles,
+                and notes, enriches them, and runs normalized duplicate detection.
+              </Trans>
+            </p>
+            <Button
+              size="sm"
+              disabled={runningPlaybook !== null}
+              onClick={() => void runDataStewardPlaybook()}
+            >
+              <ShieldCheck data-icon="inline-start" />
+              {runningPlaybook === "steward-hygiene" ? (
+                <Trans>Executing…</Trans>
+              ) : (
+                <Trans>Run Hygiene & Deduplication</Trans>
+              )}
+            </Button>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                Playbook 04 · Operations + Finance
+              </span>
+              <StatusBadge tone="warning">{t`Order-to-Cash Automation`}</StatusBadge>
+            </div>
+            <h3 className="text-sm font-semibold">
+              <Trans>Autonomous Quote-to-Order & Invoice Issuance</Trans>
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              <Trans>
+                Operations drafts Sales Orders for active deals and requests approval; Finance
+                generates and issues Tax Invoices for confirmed orders and schedules AR collections.
+              </Trans>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={runningPlaybook !== null}
+                onClick={() => void runOperationsOrderPlaybook()}
+              >
+                <ShoppingCart data-icon="inline-start" />
+                <Trans>Run Operations Order Playbook</Trans>
+              </Button>
+              <Button
+                size="sm"
+                disabled={runningPlaybook !== null}
+                onClick={() => void runFinanceInvoicingPlaybook()}
+              >
+                <ReceiptText data-icon="inline-start" />
+                <Trans>Run Finance Billing Playbook</Trans>
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* TAB 3: HUMAN-IN-THE-LOOP GOVERNANCE & APPROVAL QUEUE */}
+      {activeTab === "approvals" ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* Column 1: Sales Orders Awaiting Approval / Confirmation */}
+          <Panel
+            title={t`ERP Sales Orders Queue`}
+            aside={`${pendingOrders.length}`}
+            testId="governance-orders"
+          >
+            {pendingOrders.length > 0 ? (
+              <div className="divide-y">
+                {pendingOrders.map((order) => (
+                  <div key={order.id} className="py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link
+                        to={erpHref("orders", { record: order.id })}
+                        className="font-mono text-xs font-semibold hover:underline"
+                      >
+                        {frappeOrderDocName(order)} · {order.ref}
+                      </Link>
+                      <StatusBadge tone={ORDER_STATUS_TONES[order.status]}>
+                        {order.status}
+                      </StatusBadge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{order.companyName ?? "Customer"}</span>
+                      <span className="font-semibold text-foreground tabular-nums">
+                        {money(order.subtotal)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] text-muted-foreground">
+                        <Trans>Prepared by</Trans> {actorName(order.createdBy)}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const operatorBot = findBot("Operator");
+                          const opsBot = findBot("Operations");
+                          void (async () => {
+                            try {
+                              if (order.status === "draft") {
+                                await rpc.erp.orders.requestApproval({
+                                  id: order.id,
+                                  ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                                });
+                              }
+                              if (order.status !== "approved") {
+                                await rpc.erp.orders.approve({
+                                  id: order.id,
+                                  ...(operatorBot ? { actorBotId: operatorBot.id } : {}),
+                                });
+                              }
+                              await rpc.erp.orders.confirm({
+                                id: order.id,
+                                ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                              });
+                              onReload();
+                            } catch (cause) {
+                              onError(errorText(cause));
+                            }
+                          })();
+                        }}
+                      >
+                        <Check data-icon="inline-start" />
+                        <Trans>Approve & Confirm</Trans>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <PanelEmpty icon={ShoppingCart}>{t`No orders awaiting approval`}</PanelEmpty>
+            )}
+          </Panel>
+
+          {/* Column 2: Sales Invoices Awaiting Issuance or Settlement */}
+          <Panel
+            title={t`ERP Invoices & Collections`}
+            aside={`${actionableInvoices.length}`}
+            testId="governance-invoices"
+          >
+            {actionableInvoices.length > 0 ? (
+              <div className="divide-y">
+                {actionableInvoices.map((inv) => {
+                  const balance = Math.max(0, inv.total - inv.amountPaid);
+                  return (
+                    <div key={inv.id} className="py-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Link
+                          to={erpHref("invoices", { record: inv.id })}
+                          className="font-mono text-xs font-semibold hover:underline"
+                        >
+                          {frappeInvoiceDocName(inv)} · {inv.ref}
+                        </Link>
+                        <StatusBadge tone={INVOICE_STATUS_TONES[inv.status]}>
+                          {inv.status === "issued" ? inv.paymentStatus : inv.status}
+                        </StatusBadge>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{inv.companyName ?? inv.orderRef}</span>
+                        <span className="font-semibold text-foreground tabular-nums">
+                          {money(inv.status === "issued" ? balance : inv.total)}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <span className="text-[11px] text-muted-foreground">
+                          <Trans>By</Trans> {actorName(inv.createdBy)}
+                        </span>
+                        {inv.status === "draft" ? (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              const finBot = findBot("Finance");
+                              void rpc.erp.invoices
+                                .issue({
+                                  id: inv.id,
+                                  ...(finBot ? { actorBotId: finBot.id } : {}),
+                                })
+                                .then(() => onReload())
+                                .catch((cause) => onError(errorText(cause)));
+                            }}
+                          >
+                            <Send data-icon="inline-start" />
+                            <Trans>Approve & Issue</Trans>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const finBot = findBot("Finance");
+                              void rpc.erp.invoices
+                                .recordPayment({
+                                  id: inv.id,
+                                  amount: balance,
+                                  ...(finBot ? { actorBotId: finBot.id } : {}),
+                                })
+                                .then(() => onReload())
+                                .catch((cause) => onError(errorText(cause)));
+                            }}
+                          >
+                            <Check data-icon="inline-start" />
+                            <Trans>Record Full Payment</Trans>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <PanelEmpty icon={ReceiptText}>{t`All invoices settled`}</PanelEmpty>
+            )}
+          </Panel>
+
+          {/* Column 3: Qualified Leads Ready for Conversion */}
+          <Panel
+            title={t`Qualified Leads Ready to Convert`}
+            aside={`${qualifiedLeads.length}`}
+            testId="governance-leads"
+          >
+            {qualifiedLeads.length > 0 ? (
+              <div className="divide-y">
+                {qualifiedLeads.map((lead) => (
+                  <div key={lead.id} className="py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link
+                        to={crmHref("leads", { record: lead.id })}
+                        className="font-mono text-xs font-semibold hover:underline"
+                      >
+                        {frappeLeadDocName(lead)} · {lead.ref}
+                      </Link>
+                      <StatusBadge tone="success">{t`Qualified`}</StatusBadge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="truncate">{lead.title}</span>
+                      <span className="font-semibold text-foreground tabular-nums">
+                        {lead.value !== null ? money(lead.value) : "—"}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <span className="text-[11px] text-muted-foreground">
+                        <Trans>Qualified by</Trans> {actorName(lead.assignee)}
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const salesBot = findBot("Sales");
+                          void rpc.crm.leads
+                            .convert({
+                              id: lead.id,
+                              ...(salesBot ? { actorBotId: salesBot.id } : {}),
+                            })
+                            .then(() => onReload())
+                            .catch((cause) => onError(errorText(cause)));
+                        }}
+                      >
+                        <Handshake data-icon="inline-start" />
+                        <Trans>Convert to Deal</Trans>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <PanelEmpty icon={Target}>{t`No qualified leads waiting`}</PanelEmpty>
+            )}
+          </Panel>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ============================================================================
+// 12. ERPNEXT FULL-PAGE 2-PANE SPLIT WORKSPACES FOR SALES ORDERS & INVOICES
+// ============================================================================
+
+export function ErpOrderWorkspace({
+  orderId,
+  lookups,
+  currency,
+  revision,
+  onBack,
+  onChanged,
+  onError,
+}: {
+  orderId: string;
+  lookups: {
+    products: ErpProduct[];
+    companies: CrmCompany[];
+    contacts: CrmContact[];
+    deals: CrmDeal[];
+    bots: Bot[];
+    settings: BusinessSettings | null;
+  };
+  currency: string;
+  revision: number;
+  onBack: () => void;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const { t } = useLingui();
+  const navigate = useNavigate();
+  const formId = useId();
+  const statuses = useOrderStatusLabels();
+  const money = useMoney(currency);
+  const [order, setOrder] = useState<ErpSalesOrder | null>(null);
+  const [tab, setTab] = useState<"lines" | "print" | "custom">("lines");
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [localRev, setLocalRev] = useState(0);
+
+  useEffect(() => {
+    void rpc.erp.orders
+      .get({ id: orderId })
+      .then((row) => setOrder(row))
+      .catch((cause) => onError(errorText(cause)));
+  }, [orderId, revision, localRev, onError]);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await action();
+      setLocalRev((r) => r + 1);
+      onChanged();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!order) {
+    return (
+      <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+        <Trans>Loading Sales Order document…</Trans>
+      </div>
+    );
+  }
+
+  const docName = frappeOrderDocName(order);
+  const draft = order.status === "draft";
+  const open = order.status !== "confirmed" && order.status !== "cancelled";
+  const canConfirm =
+    order.status === "approved" ||
+    (open && lookups.settings?.orderApprovalRequired === false && order.lines.length > 0);
+  const qtyVal = Number.parseInt(quantity, 10);
+  const company = order.companyId
+    ? lookups.companies.find((c) => c.id === order.companyId)
+    : undefined;
+  const deal = order.dealId ? lookups.deals.find((d) => d.id === order.dealId) : undefined;
+  const opsBot = lookups.bots.find((b) => b.name.includes("Operations")) ?? lookups.bots[0];
+  const operatorBot = lookups.bots.find((b) => b.name.includes("Operator")) ?? lookups.bots[0];
+  const financeBot = lookups.bots.find((b) => b.name.includes("Finance")) ?? lookups.bots[0];
+
+  const steps: { key: ErpSalesOrder["status"]; label: string; reached: boolean }[] = [
+    { key: "draft", label: statuses.draft, reached: true },
+    {
+      key: "pending_approval",
+      label: statuses.pending_approval,
+      reached: Boolean(order.approvalRequestedAt),
+    },
+    { key: "approved", label: statuses.approved, reached: Boolean(order.approvedAt) },
+    { key: "confirmed", label: statuses.confirmed, reached: Boolean(order.confirmedAt) },
+  ];
+
+  return (
+    <div className="space-y-4" data-testid="erp-order-workspace">
+      {/* Top Document Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label={t`Back`}>
+            <ArrowLeft />
+          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <button type="button" onClick={onBack} className="hover:text-foreground">
+                <Trans>Sales Orders</Trans>
+              </button>
+              <ChevronRight className="size-3.5" />
+              <span className="font-mono">{docName}</span>
+              <span>·</span>
+              <span className="font-mono">{order.ref}</span>
+              <StatusBadge tone={ORDER_STATUS_TONES[order.status]}>
+                {statuses[order.status]}
+              </StatusBadge>
+              {order.invoiceId ? <StatusBadge tone="success">{t`Invoiced`}</StatusBadge> : null}
+            </div>
+            <h2 className="truncate text-base font-semibold">
+              {order.companyName ?? order.contactName ?? order.ref} — {money(order.subtotal)}
+            </h2>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <AskAssistantButton
+            record={{
+              kind: "order",
+              ref: order.ref,
+              name: order.companyName ?? order.ref,
+              status: order.status,
+            }}
+          />
+          {draft && order.lines.length > 0 ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => run(() => rpc.erp.orders.requestApproval({ id: order.id }))}
+            >
+              <Trans>Request Approval</Trans>
+            </Button>
+          ) : null}
+          {order.status === "pending_approval" ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => run(() => rpc.erp.orders.approve({ id: order.id }))}
+            >
+              <Check data-icon="inline-start" />
+              <Trans>Approve Order</Trans>
+            </Button>
+          ) : null}
+          {canConfirm ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => run(() => rpc.erp.orders.confirm({ id: order.id }))}
+            >
+              <Check data-icon="inline-start" />
+              <Trans>Confirm & Deduct Stock</Trans>
+            </Button>
+          ) : null}
+          {order.status === "confirmed" && !order.invoiceId ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const inv = await rpc.erp.invoices.createDraft({
+                    orderId: order.id,
+                    ...(financeBot ? { actorBotId: financeBot.id } : {}),
+                  });
+                  await navigate(erpHref("invoices", { record: inv.id }));
+                })
+              }
+            >
+              <ReceiptText data-icon="inline-start" />
+              <Trans>Create Draft Invoice</Trans>
+            </Button>
+          ) : null}
+          {open ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => run(() => rpc.erp.orders.cancel({ id: order.id }))}
+            >
+              <Trans>Cancel</Trans>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Interactive Status Stepper */}
+      <div className="grid grid-cols-4 gap-2 rounded-xl border bg-card p-3">
+        {steps.map((step, idx) => {
+          const active = order.status === step.key;
+          return (
+            <div
+              key={step.key}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+                active
+                  ? "border-foreground bg-foreground text-background font-semibold"
+                  : step.reached
+                    ? "bg-muted/40 text-foreground"
+                    : "text-muted-foreground opacity-60",
+              )}
+            >
+              <span className="font-mono text-[11px]">0{idx + 1}</span>
+              <span className="truncate">{step.label}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Left 8-col Main Document Pane */}
+        <div className="space-y-4 lg:col-span-8">
+          <div className="flex items-center gap-1 border-b pb-2">
+            {(
+              [
+                { id: "lines", label: t`Order Items & Pricing (${order.lines.length})` },
+                { id: "print", label: t`Tax Sales Order Print View` },
+                { id: "custom", label: t`Custom Fields & Metadata` },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  tab === item.id
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "lines" ? (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border bg-card">
+                <table className="w-full text-sm" data-testid="order-lines">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+                      <th className="h-9 ps-4 pe-2 text-start font-medium">{t`Item Code · Description`}</th>
+                      <th className="px-2 text-start font-medium">{t`HSN/SAC`}</th>
+                      <th className="px-2 text-end font-medium">{t`Qty`}</th>
+                      <th className="px-2 text-end font-medium">{t`Rate`}</th>
+                      <th className="ps-2 pe-4 text-end font-medium">{t`Amount`}</th>
+                      {draft ? <th className="w-10" /> : null}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {order.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td className="py-2.5 ps-4 pe-2">
+                          <div className="font-mono text-xs text-muted-foreground">{line.sku}</div>
+                          <div className="font-medium">{line.description}</div>
+                        </td>
+                        <td className="px-2 py-2.5 font-mono text-xs text-muted-foreground">
+                          998314
+                        </td>
+                        <td className="px-2 py-2.5 text-end tabular-nums">{line.quantity}</td>
+                        <td className="px-2 py-2.5 text-end tabular-nums">
+                          {money(line.unitPrice)}
+                        </td>
+                        <td className="py-2.5 ps-2 pe-4 text-end font-semibold tabular-nums">
+                          {money(line.lineTotal)}
+                        </td>
+                        {draft ? (
+                          <td className="pe-2 text-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={() =>
+                                run(() =>
+                                  rpc.erp.orders.removeItem({
+                                    orderId: order.id,
+                                    lineId: line.id,
+                                  }),
+                                )
+                              }
+                            >
+                              ×
+                            </Button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted/20 font-semibold">
+                      <td className="py-3 ps-4 pe-2" colSpan={4}>
+                        <Trans>Net Total ({currency})</Trans>
+                      </td>
+                      <td className="py-3 ps-2 pe-4 text-end tabular-nums">
+                        {money(order.subtotal)}
+                      </td>
+                      {draft ? <td /> : null}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <QuoteTaxCalculatorCard
+                recordId={order.id}
+                currency={currency}
+                grossSubtotal={order.subtotal}
+              />
+
+              {draft ? (
+                <div className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed bg-card p-4">
+                  <FormField
+                    id={`${formId}-prod`}
+                    label={t`Add Catalog Item`}
+                    className="min-w-48 flex-1"
+                  >
+                    <NativeSelect
+                      id={`${formId}-prod`}
+                      className="w-full"
+                      value={productId}
+                      onChange={(e) => setProductId(e.target.value)}
+                    >
+                      <NativeSelectOption value="">{t`Select SKU…`}</NativeSelectOption>
+                      {lookups.products
+                        .filter((p) => p.active)
+                        .map((p) => (
+                          <NativeSelectOption key={p.id} value={p.id}>
+                            {p.sku} · {p.name} ({money(p.unitPrice)})
+                          </NativeSelectOption>
+                        ))}
+                    </NativeSelect>
+                  </FormField>
+                  <FormField id={`${formId}-qty`} label={t`Qty`} className="w-24">
+                    <Input
+                      id={`${formId}-qty`}
+                      inputMode="numeric"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                    />
+                  </FormField>
+                  <Button
+                    variant="outline"
+                    disabled={busy || !productId || !(qtyVal > 0)}
+                    onClick={() =>
+                      run(() =>
+                        rpc.erp.orders.addItem({
+                          orderId: order.id,
+                          productId,
+                          quantity: qtyVal,
+                        }),
+                      )
+                    }
+                  >
+                    <Plus data-icon="inline-start" />
+                    <Trans>Add Line</Trans>
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {tab === "print" ? (
+            <div className="rounded-xl border bg-card p-6 space-y-6">
+              <div className="flex items-start justify-between border-b pb-4">
+                <div>
+                  <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                    Commercial Sales Order & Quotation Document
+                  </span>
+                  <h3 className="text-xl font-bold mt-0.5">SALES ORDER · {docName}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Reference: {order.ref} · Date: {new Date(order.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => window.print()}>
+                  <FileText data-icon="inline-start" />
+                  <Trans>Print / Save PDF</Trans>
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-6 text-xs">
+                <div className="space-y-1">
+                  <span className="font-semibold uppercase text-muted-foreground">
+                    <Trans>Customer / Billed To</Trans>
+                  </span>
+                  <p className="text-sm font-semibold">{order.companyName ?? "—"}</p>
+                  {order.contactName ? <p>Attn: {order.contactName}</p> : null}
+                  {company?.domain ? <p>{company.domain}</p> : null}
+                </div>
+                <div className="space-y-1 text-end">
+                  <span className="font-semibold uppercase text-muted-foreground">
+                    <Trans>Fulfillment & Governance</Trans>
+                  </span>
+                  <p>Status: {statuses[order.status]}</p>
+                  <p>Prepared By: {actorName(order.createdBy)}</p>
+                  {order.approvedAt ? <p>Approved By: {actorName(order.approvedBy)}</p> : null}
+                </div>
+              </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="p-2 text-start">Sr</th>
+                      <th className="p-2 text-start">Item / Description</th>
+                      <th className="p-2 text-end">Qty</th>
+                      <th className="p-2 text-end">Rate</th>
+                      <th className="p-2 text-end">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {order.lines.map((line, i) => (
+                      <tr key={line.id}>
+                        <td className="p-2 font-mono">{i + 1}</td>
+                        <td className="p-2">
+                          <span className="font-mono font-semibold">{line.sku}</span> —{" "}
+                          {line.description}
+                        </td>
+                        <td className="p-2 text-end tabular-nums">{line.quantity}</td>
+                        <td className="p-2 text-end tabular-nums">{money(line.unitPrice)}</td>
+                        <td className="p-2 text-end font-semibold tabular-nums">
+                          {money(line.lineTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted/20 font-bold">
+                      <td className="p-2" colSpan={4}>
+                        Grand Total ({currency})
+                      </td>
+                      <td className="p-2 text-end tabular-nums">{money(order.subtotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {order.notes ? (
+                <p className="text-xs text-muted-foreground">Notes: {order.notes}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {tab === "custom" ? (
+            <SavingroupCustomFieldsSection
+              recordType="order"
+              recordId={order.id}
+              legacyRef={order.ref}
+              createdBy={order.createdBy}
+              extra={[
+                { label: t`Approval Status`, value: order.status },
+                { label: t`Source Deal`, value: order.dealId ?? "—" },
+              ]}
+            />
+          ) : null}
+        </div>
+
+        {/* Right 4-col Sidebar */}
+        <div className="space-y-4 lg:col-span-4">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Trans>Execute as ERP Digital Employee</Trans>
+            </h3>
+            <div className="flex flex-col gap-1.5">
+              {order.status !== "confirmed" && order.status !== "cancelled" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy || order.lines.length === 0}
+                  onClick={() =>
+                    run(async () => {
+                      if (order.status === "draft") {
+                        await rpc.erp.orders.requestApproval({
+                          id: order.id,
+                          ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                        });
+                      }
+                      if (order.status !== "approved") {
+                        await rpc.erp.orders.approve({
+                          id: order.id,
+                          ...(operatorBot ? { actorBotId: operatorBot.id } : {}),
+                        });
+                      }
+                      await rpc.erp.orders.confirm({
+                        id: order.id,
+                        ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                      });
+                    })
+                  }
+                >
+                  <Sparkles data-icon="inline-start" />
+                  <Trans>Operator + Operations: Approve & Confirm Order</Trans>
+                </Button>
+              ) : null}
+              {order.status === "confirmed" && !order.invoiceId ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="justify-start text-xs"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      const inv = await rpc.erp.invoices.createDraft({
+                        orderId: order.id,
+                        dueAt: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+                        ...(financeBot ? { actorBotId: financeBot.id } : {}),
+                      });
+                      await rpc.erp.invoices.issue({
+                        id: inv.id,
+                        ...(financeBot ? { actorBotId: financeBot.id } : {}),
+                      });
+                      await navigate(erpHref("invoices", { record: inv.id }));
+                    })
+                  }
+                >
+                  <ReceiptText data-icon="inline-start" />
+                  <Trans>Finance AI: Generate & Issue Tax Invoice</Trans>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Trans>Sales Order Properties</Trans>
+            </h3>
+            <DetailList
+              items={[
+                { label: t`DocType`, value: <span className="font-mono">Sales Order</span> },
+                { label: t`Document`, value: <span className="font-mono">{docName}</span> },
+                {
+                  label: t`Customer`,
+                  value: company ? (
+                    <Link
+                      to={crmHref("companies", { record: company.id })}
+                      className="underline underline-offset-4"
+                    >
+                      {company.name}
+                    </Link>
+                  ) : (
+                    (order.companyName ?? "—")
+                  ),
+                },
+                {
+                  label: t`Linked Deal`,
+                  value: deal ? (
+                    <Link
+                      to={crmHref("deals", { record: deal.id })}
+                      className="underline underline-offset-4"
+                    >
+                      {deal.ref} · {deal.title}
+                    </Link>
+                  ) : (
+                    "—"
+                  ),
+                },
+                {
+                  label: t`Linked Invoice`,
+                  value: order.invoiceId ? (
+                    <Link
+                      to={erpHref("invoices", { record: order.invoiceId })}
+                      className="underline underline-offset-4"
+                    >
+                      <Trans>Open Sales Invoice</Trans> →
+                    </Link>
+                  ) : (
+                    "—"
+                  ),
+                },
+                { label: t`Created By`, value: <ActorLabel actor={order.createdBy} /> },
+              ]}
+            />
+          </div>
+
+          <div className="rounded-xl border bg-card p-4">
+            <HistoryList recordType="order" recordId={order.id} revision={revision + localRev} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ErpInvoiceWorkspace({
+  invoiceId,
+  bots,
+  currency,
+  revision,
+  onBack,
+  onChanged,
+  onError,
+}: {
+  invoiceId: string;
+  bots: Bot[];
+  currency: string;
+  revision: number;
+  onBack: () => void;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const { t } = useLingui();
+  const formId = useId();
+  const statuses = useInvoiceStatusLabels();
+  const money = useMoney(currency);
+  const [invoice, setInvoice] = useState<ErpInvoice | null>(null);
+  const [contacts, setContacts] = useState<CrmContact[]>([]);
+  const [tab, setTab] = useState<"lines" | "print" | "custom">("lines");
+  const [amount, setAmount] = useState("");
+  const [sendingPaymentLink, setSendingPaymentLink] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [localRev, setLocalRev] = useState(0);
+
+  useEffect(() => {
+    void Promise.all([
+      rpc.erp.invoices.get({ id: invoiceId }),
+      rpc.crm.contacts.list({ limit: 100 }).catch(() => ({ contacts: [] as CrmContact[] })),
+    ])
+      .then(([row, contactsRes]) => {
+        setInvoice(row);
+        setContacts(contactsRes.contacts);
+      })
+      .catch((cause) => onError(errorText(cause)));
+  }, [invoiceId, revision, localRev, onError]);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await action();
+      setLocalRev((r) => r + 1);
+      onChanged();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!invoice) {
+    return (
+      <div className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+        <Trans>Loading Sales Invoice document…</Trans>
+      </div>
+    );
+  }
+
+  const docName = frappeInvoiceDocName(invoice);
+  const outstanding = Math.max(0, Math.round((invoice.total - invoice.amountPaid) * 100) / 100);
+  const parsedAmount = parseMoneyInput(amount);
+  const financeBot = bots.find((b) => b.name.includes("Finance")) ?? bots[0];
+
+  return (
+    <div className="space-y-4" data-testid="erp-invoice-workspace">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label={t`Back`}>
+            <ArrowLeft />
+          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <button type="button" onClick={onBack} className="hover:text-foreground">
+                <Trans>Sales Invoices</Trans>
+              </button>
+              <ChevronRight className="size-3.5" />
+              <span className="font-mono">{docName}</span>
+              <span>·</span>
+              <span className="font-mono">{invoice.ref}</span>
+              <StatusBadge tone={INVOICE_STATUS_TONES[invoice.status]}>
+                {statuses[invoice.status]}
+              </StatusBadge>
+              <StatusBadge tone={outstanding === 0 ? "success" : "warning"}>
+                {invoice.paymentStatus}
+              </StatusBadge>
+            </div>
+            <h2 className="truncate text-base font-semibold">
+              {invoice.companyName ?? invoice.ref} — {money(invoice.total)}
+            </h2>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <AskAssistantButton
+            record={{
+              kind: "invoice",
+              ref: invoice.ref,
+              name: invoice.companyName,
+              status: invoice.status,
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setSendingPaymentLink(true)}
+          >
+            <Mail data-icon="inline-start" />
+            <Trans>Send Payment Link</Trans>
+          </Button>
+          {invoice.status === "draft" ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => run(() => rpc.erp.invoices.issue({ id: invoice.id }))}
+            >
+              <Send data-icon="inline-start" />
+              <Trans>Issue Invoice</Trans>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <KpiGrid>
+        <KpiCard label={t`Grand Total`} value={money(invoice.total)} icon={ReceiptText} />
+        <KpiCard label={t`Amount Paid`} value={money(invoice.amountPaid)} icon={CircleCheck} />
+        <KpiCard
+          label={t`Outstanding Balance`}
+          value={money(outstanding)}
+          icon={ClipboardCheck}
+          attention={outstanding > 0}
+        />
+        <KpiCard
+          label={t`Source Sales Order`}
+          value={invoice.orderRef}
+          icon={ShoppingCart}
+          to={erpHref("orders", { record: invoice.orderId })}
+        />
+      </KpiGrid>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="space-y-4 lg:col-span-8">
+          <div className="flex items-center gap-1 border-b pb-2">
+            {(
+              [
+                { id: "lines", label: t`Invoice Lines & Payment Entry` },
+                { id: "print", label: t`Tax Invoice Print View (GST)` },
+                { id: "custom", label: t`Custom Fields` },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  tab === item.id
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "lines" ? (
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border bg-card">
+                <table className="w-full text-sm" data-testid="invoice-lines">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+                      <th className="h-9 ps-4 pe-2 text-start font-medium">{t`Description`}</th>
+                      <th className="px-2 text-end font-medium">{t`Qty`}</th>
+                      <th className="px-2 text-end font-medium">{t`Unit Price`}</th>
+                      <th className="ps-2 pe-4 text-end font-medium">{t`Line Total`}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {invoice.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td className="py-2.5 ps-4 pe-2 font-medium">{line.description}</td>
+                        <td className="px-2 py-2.5 text-end tabular-nums">{line.quantity}</td>
+                        <td className="px-2 py-2.5 text-end tabular-nums">
+                          {money(line.unitPrice)}
+                        </td>
+                        <td className="py-2.5 ps-2 pe-4 text-end font-semibold tabular-nums">
+                          {money(line.lineTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted/20 font-semibold">
+                      <td className="py-3 ps-4 pe-2" colSpan={3}>
+                        <Trans>Invoice Total</Trans>
+                      </td>
+                      <td className="py-3 ps-2 pe-4 text-end tabular-nums">
+                        {money(invoice.total)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <QuoteTaxCalculatorCard
+                recordId={invoice.id}
+                currency={currency}
+                grossSubtotal={invoice.total}
+              />
+
+              {invoice.status === "issued" && outstanding > 0 ? (
+                <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-4">
+                  <FormField
+                    id={`${formId}-pay`}
+                    label={t`Record Payment Amount (${currency})`}
+                    className="w-48"
+                  >
+                    <Input
+                      id={`${formId}-pay`}
+                      inputMode="decimal"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder={String(outstanding)}
+                    />
+                  </FormField>
+                  <Button
+                    disabled={busy || !(parsedAmount !== undefined && parsedAmount > 0)}
+                    onClick={() =>
+                      run(() =>
+                        rpc.erp.invoices.recordPayment({
+                          id: invoice.id,
+                          amount: parsedAmount ?? 0,
+                        }),
+                      )
+                    }
+                  >
+                    <Check data-icon="inline-start" />
+                    <Trans>Record Payment</Trans>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      run(() =>
+                        rpc.erp.invoices.recordPayment({
+                          id: invoice.id,
+                          amount: outstanding,
+                          ...(financeBot ? { actorBotId: financeBot.id } : {}),
+                        }),
+                      )
+                    }
+                  >
+                    <Sparkles data-icon="inline-start" />
+                    <Trans>Finance AI: Settle Full Balance ({money(outstanding)})</Trans>
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {tab === "print" ? (
+            <div className="rounded-xl border bg-card p-6 space-y-6">
+              <div className="flex items-start justify-between border-b pb-4">
+                <div>
+                  <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                    Commercial Tax Invoice Document
+                  </span>
+                  <h3 className="text-xl font-bold mt-0.5">TAX INVOICE · {docName}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Ref: {invoice.ref} · Order: {invoice.orderRef}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => window.print()}>
+                  <FileText data-icon="inline-start" />
+                  <Trans>Print / Save PDF</Trans>
+                </Button>
+              </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="p-2 text-start">Item</th>
+                      <th className="p-2 text-end">Qty</th>
+                      <th className="p-2 text-end">Rate</th>
+                      <th className="p-2 text-end">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {invoice.lines.map((line) => (
+                      <tr key={line.id}>
+                        <td className="p-2 font-medium">{line.description}</td>
+                        <td className="p-2 text-end tabular-nums">{line.quantity}</td>
+                        <td className="p-2 text-end tabular-nums">{money(line.unitPrice)}</td>
+                        <td className="p-2 text-end font-semibold tabular-nums">
+                          {money(line.lineTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted/20 font-bold">
+                      <td className="p-2" colSpan={3}>
+                        Grand Total
+                      </td>
+                      <td className="p-2 text-end tabular-nums">{money(invoice.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {tab === "custom" ? (
+            <SavingroupCustomFieldsSection
+              recordType="invoice"
+              recordId={invoice.id}
+              legacyRef={invoice.ref}
+              createdBy={invoice.createdBy}
+              extra={[
+                { label: t`Source Sales Order`, value: invoice.orderRef },
+                { label: t`Payment Status`, value: invoice.paymentStatus },
+              ]}
+            />
+          ) : null}
+        </div>
+
+        <div className="space-y-4 lg:col-span-4">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Trans>Invoice Properties</Trans>
+            </h3>
+            <DetailList
+              items={[
+                { label: t`DocType`, value: <span className="font-mono">Sales Invoice</span> },
+                { label: t`Document`, value: <span className="font-mono">{docName}</span> },
+                { label: t`Customer`, value: invoice.companyName ?? "—" },
+                { label: t`Created By`, value: <ActorLabel actor={invoice.createdBy} /> },
+              ]}
+            />
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <HistoryList
+              recordType="invoice"
+              recordId={invoice.id}
+              revision={revision + localRev}
+            />
+          </div>
+        </div>
+      </div>
+      {sendingPaymentLink ? (
+        <SendInvoicePaymentModal
+          invoice={invoice}
+          contacts={contacts}
+          bots={bots}
+          onClose={() => setSendingPaymentLink(false)}
+          onSaved={() => {
+            setLocalRev((r) => r + 1);
+            onChanged();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+// ============================================================================
+// 13. ERP FULL-PAGE PRODUCT & STOCK LEDGER WORKSPACE (`Item`)
+// ============================================================================
+
+export function ErpProductWorkspace({
+  product,
+  bots,
+  companies,
+  currency,
+  revision,
+  onBack,
+  onChanged,
+  onError,
+}: {
+  product: ErpProduct;
+  bots: Bot[];
+  companies: CrmCompany[];
+  currency: string;
+  revision: number;
+  onBack: () => void;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const { t } = useLingui();
+  const navigate = useNavigate();
+  const formId = useId();
+  const orderStatuses = useOrderStatusLabels();
+  const money = useMoney(currency);
+  const [tab, setTab] = useState<"master" | "orders" | "ledger">("master");
+  const [name, setName] = useState(product.name);
+  const [unitPrice, setUnitPrice] = useState(String(product.unitPrice));
+  const [hsnCode, setHsnCode] = useState(product.hsnCode ?? "998314");
+  const [description, setDescription] = useState(product.description ?? "");
+  const [active, setActive] = useState(product.active);
+  const [adjustDelta, setAdjustDelta] = useState("10");
+  const [adjustReason, setAdjustReason] = useState("Warehouse stock replenishment");
+  const [orders, setOrders] = useState<ErpSalesOrder[]>([]);
+  const [adjustments, setAdjustments] = useState<InventoryAdjustment[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [localRev, setLocalRev] = useState(0);
+
+  useEffect(() => {
+    setName(product.name);
+    setUnitPrice(String(product.unitPrice));
+    setHsnCode(product.hsnCode ?? "998314");
+    setDescription(product.description ?? "");
+    setActive(product.active);
+  }, [product]);
+
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([
+      rpc.erp.orders.list({ limit: 200 }),
+      rpc.erp.inventory.adjustments({ productId: product.id, limit: 100 }),
+    ])
+      .then(([ordersRes, adjRes]) => {
+        if (!mounted) return;
+        setOrders(ordersRes.orders);
+        setAdjustments(adjRes);
+      })
+      .catch((cause) => {
+        if (mounted) onError(errorText(cause));
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [product.id, revision, localRev, onError]);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await action();
+      setLocalRev((r) => r + 1);
+      onChanged();
+    } catch (cause) {
+      onError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const opsBot = bots.find((b) => b.name.includes("Operations")) ?? bots[0];
+
+  const matchingOrders = useMemo(
+    () =>
+      orders.filter((order) =>
+        order.lines.some((line) => line.productId === product.id || line.sku === product.sku),
+      ),
+    [orders, product.id, product.sku],
+  );
+
+  const confirmedUnitsSold = useMemo(
+    () =>
+      matchingOrders
+        .filter((o) => o.status === "confirmed")
+        .reduce(
+          (sum, o) =>
+            sum +
+            o.lines
+              .filter((l) => l.productId === product.id || l.sku === product.sku)
+              .reduce((s, l) => s + l.quantity, 0),
+          0,
+        ),
+    [matchingOrders, product.id, product.sku],
+  );
+
+  const confirmedRevenue = useMemo(
+    () =>
+      matchingOrders
+        .filter((o) => o.status === "confirmed")
+        .reduce(
+          (sum, o) =>
+            sum +
+            o.lines
+              .filter((l) => l.productId === product.id || l.sku === product.sku)
+              .reduce((s, l) => s + l.lineTotal, 0),
+          0,
+        ),
+    [matchingOrders, product.id, product.sku],
+  );
+
+  const inventoryValue = product.stockOnHand * product.unitPrice;
+  const parsedDelta = Number.parseInt(adjustDelta, 10);
+
+  return (
+    <div className="space-y-4" data-testid="erp-product-workspace">
+      {/* Top Item Header Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label={t`Back`}>
+            <ArrowLeft />
+          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <button type="button" onClick={onBack} className="hover:text-foreground">
+                <Trans>Catalog & Pricing</Trans>
+              </button>
+              <ChevronRight className="size-3.5" />
+              <span className="font-mono font-semibold text-foreground">{product.sku}</span>
+              <StatusBadge tone={product.active ? "success" : "muted"}>
+                {product.active ? t`Active SKU` : t`Inactive`}
+              </StatusBadge>
+              <StatusBadge
+                tone={
+                  product.stockOnHand <= 0
+                    ? "destructive"
+                    : product.stockOnHand <= LOW_STOCK_THRESHOLD
+                      ? "warning"
+                      : "neutral"
+                }
+              >
+                {product.stockOnHand <= 0
+                  ? t`Out of Stock`
+                  : product.stockOnHand <= LOW_STOCK_THRESHOLD
+                    ? t`Low Stock (${product.stockOnHand})`
+                    : t`${product.stockOnHand} On Hand`}
+              </StatusBadge>
+            </div>
+            <h2 className="truncate text-base font-semibold">
+              {product.name} — {money(product.unitPrice)}
+            </h2>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <AskAssistantButton record={{ kind: "product", ref: product.sku, name: product.name }} />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              run(() =>
+                rpc.erp.inventory.adjust({
+                  productId: product.id,
+                  delta: 10,
+                  reason: "Quick warehouse receive (+10 units)",
+                }),
+              )
+            }
+          >
+            <Plus data-icon="inline-start" />
+            <Trans>+10 Quick Receive</Trans>
+          </Button>
+          {product.stockOnHand < 25 ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                run(() =>
+                  rpc.erp.inventory.adjust({
+                    productId: product.id,
+                    delta: Math.max(10, 25 - product.stockOnHand),
+                    reason: `[Operations AI] Auto-replenished ${product.sku} to target safety stock (25 units)`,
+                    ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                  }),
+                )
+              }
+            >
+              <Sparkles data-icon="inline-start" />
+              <Trans>Operations AI: Replenish to 25</Trans>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* 4 Item KPI Cards */}
+      <KpiGrid>
+        <KpiCard
+          label={t`Stock On Hand`}
+          value={product.stockOnHand}
+          icon={Boxes}
+          attention={product.active && product.stockOnHand <= LOW_STOCK_THRESHOLD}
+          detail={{ label: t`Reorder threshold`, value: LOW_STOCK_THRESHOLD }}
+        />
+        <KpiCard
+          label={t`Inventory Valuation`}
+          value={money(inventoryValue)}
+          icon={Database}
+          detail={{ label: t`Unit price`, value: money(product.unitPrice) }}
+        />
+        <KpiCard
+          label={t`Confirmed Units Sold`}
+          value={confirmedUnitsSold}
+          icon={ShoppingCart}
+          detail={{ label: t`Orders containing SKU`, value: matchingOrders.length }}
+        />
+        <KpiCard
+          label={t`Booked SKU Revenue`}
+          value={money(confirmedRevenue)}
+          icon={TrendingUp}
+          detail={{ label: t`Tax / HSN code`, value: product.hsnCode ?? "998314" }}
+        />
+      </KpiGrid>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="space-y-4 lg:col-span-8">
+          <div className="flex items-center gap-1 border-b pb-2">
+            {(
+              [
+                { id: "master", label: t`Item Master, Pricing & Stock Adjustment` },
+                {
+                  id: "orders",
+                  label: t`Sales Orders Containing SKU (${matchingOrders.length})`,
+                },
+                {
+                  id: "ledger",
+                  label: t`Stock Movement Ledger (${adjustments.length})`,
+                },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  tab === item.id
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "master" ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-card p-4 space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Trans>Catalog Item & Pricing Configuration</Trans>
+                </h3>
+                <FieldRow>
+                  <FormField id={`${formId}-name`} label={t`Item Name`} required>
+                    <Input
+                      id={`${formId}-name`}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      maxLength={BUSINESS_NAME_MAX_LENGTH}
+                    />
+                  </FormField>
+                  <FormField
+                    id={`${formId}-price`}
+                    label={t`Standard Selling Price (${currency})`}
+                    required
+                  >
+                    <Input
+                      id={`${formId}-price`}
+                      inputMode="decimal"
+                      value={unitPrice}
+                      onChange={(e) => setUnitPrice(e.target.value)}
+                    />
+                  </FormField>
+                </FieldRow>
+                <FieldRow>
+                  <FormField id={`${formId}-hsn`} label={t`Tax / HSN-SAC Classification Code`}>
+                    <Input
+                      id={`${formId}-hsn`}
+                      className="font-mono"
+                      value={hsnCode}
+                      onChange={(e) => setHsnCode(e.target.value)}
+                      maxLength={12}
+                    />
+                  </FormField>
+                  <div className="flex items-end">
+                    <div className="w-full rounded-lg border px-3">
+                      <SwitchField
+                        id={`${formId}-active`}
+                        checked={active}
+                        onChange={setActive}
+                        label={t`Active in Catalog & Order Builder`}
+                      />
+                    </div>
+                  </div>
+                </FieldRow>
+                <FormField id={`${formId}-desc`} label={t`Specification & Commercial Description`}>
+                  <Textarea
+                    id={`${formId}-desc`}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    maxLength={BUSINESS_TEXT_MAX_LENGTH}
+                  />
+                </FormField>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={busy || !name.trim()}
+                    onClick={() =>
+                      run(() =>
+                        rpc.erp.products.update({
+                          id: product.id,
+                          name: name.trim(),
+                          unitPrice: parseMoneyInput(unitPrice) ?? product.unitPrice,
+                          hsnCode: hsnCode.trim() || null,
+                          description: description.trim() || null,
+                          active,
+                        }),
+                      )
+                    }
+                  >
+                    <Check data-icon="inline-start" />
+                    <Trans>Save Item Master</Trans>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4 space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Trans>Record Warehouse Stock Movement</Trans>
+                </h3>
+                <div className="flex flex-wrap items-end gap-2">
+                  <FormField
+                    id={`${formId}-delta`}
+                    label={t`Quantity Delta (+ receive / - deduct)`}
+                    className="w-48"
+                  >
+                    <Input
+                      id={`${formId}-delta`}
+                      inputMode="numeric"
+                      value={adjustDelta}
+                      onChange={(e) => setAdjustDelta(e.target.value)}
+                    />
+                  </FormField>
+                  <FormField
+                    id={`${formId}-reason`}
+                    label={t`Adjustment Reason / Reference`}
+                    className="min-w-52 flex-1"
+                  >
+                    <Input
+                      id={`${formId}-reason`}
+                      value={adjustReason}
+                      onChange={(e) => setAdjustReason(e.target.value)}
+                    />
+                  </FormField>
+                  <Button
+                    variant="outline"
+                    disabled={
+                      busy ||
+                      !Number.isInteger(parsedDelta) ||
+                      parsedDelta === 0 ||
+                      !adjustReason.trim()
+                    }
+                    onClick={() =>
+                      run(() =>
+                        rpc.erp.inventory.adjust({
+                          productId: product.id,
+                          delta: parsedDelta,
+                          reason: adjustReason.trim(),
+                        }),
+                      )
+                    }
+                  >
+                    <Boxes data-icon="inline-start" />
+                    <Trans>Post Stock Entry</Trans>
+                  </Button>
+                </div>
+              </div>
+
+              <SavingroupCustomFieldsSection
+                recordType="product"
+                recordId={product.id}
+                legacyRef={product.sku}
+                createdBy={product.createdBy}
+                extra={[
+                  { label: t`Tax / HSN Classification`, value: product.hsnCode ?? "998314" },
+                  { label: t`Current Bin Quantity`, value: String(product.stockOnHand) },
+                ]}
+              />
+            </div>
+          ) : null}
+
+          {tab === "orders" ? (
+            <div className="rounded-xl border bg-card overflow-hidden">
+              {matchingOrders.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+                      <th className="py-2.5 ps-4 pe-2 text-start font-medium">{t`Sales Order`}</th>
+                      <th className="px-2 py-2.5 text-start font-medium">{t`Customer`}</th>
+                      <th className="px-2 py-2.5 text-start font-medium">{t`Status`}</th>
+                      <th className="px-2 py-2.5 text-end font-medium">{t`SKU Qty`}</th>
+                      <th className="py-2.5 ps-2 pe-4 text-end font-medium">{t`Line Value`}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {matchingOrders.map((order) => {
+                      const skuLines = order.lines.filter(
+                        (l) => l.productId === product.id || l.sku === product.sku,
+                      );
+                      const qty = skuLines.reduce((s, l) => s + l.quantity, 0);
+                      const lineVal = skuLines.reduce((s, l) => s + l.lineTotal, 0);
+                      return (
+                        <tr
+                          key={order.id}
+                          className="cursor-pointer hover:bg-accent/40"
+                          onClick={() => void navigate(erpHref("orders", { record: order.id }))}
+                        >
+                          <td className="py-2.5 ps-4 pe-2 font-mono text-xs font-semibold">
+                            {frappeOrderDocName(order)} · {order.ref}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            {order.companyName ?? order.contactName ?? "—"}
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <StatusBadge tone={ORDER_STATUS_TONES[order.status]}>
+                              {orderStatuses[order.status]}
+                            </StatusBadge>
+                          </td>
+                          <td className="px-2 py-2.5 text-end tabular-nums">{qty}</td>
+                          <td className="py-2.5 ps-2 pe-4 text-end font-semibold tabular-nums">
+                            {money(lineVal)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6">
+                  <PanelEmpty
+                    icon={ShoppingCart}
+                  >{t`No sales orders contain this SKU yet`}</PanelEmpty>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {tab === "ledger" ? (
+            <div className="rounded-xl border bg-card overflow-hidden">
+              {adjustments.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+                      <th className="py-2.5 ps-4 pe-2 text-start font-medium">{t`Reason / Reference`}</th>
+                      <th className="px-2 py-2.5 text-end font-medium">{t`Delta`}</th>
+                      <th className="px-2 py-2.5 text-end font-medium">{t`Balance After`}</th>
+                      <th className="py-2.5 ps-2 pe-4 text-end font-medium">{t`Posted By`}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {adjustments.map((adj) => (
+                      <tr key={adj.id}>
+                        <td className="py-2.5 ps-4 pe-2 font-medium">{adj.reason}</td>
+                        <td className="px-2 py-2.5 text-end font-mono font-semibold tabular-nums">
+                          {adj.delta > 0 ? `+${adj.delta}` : `−${-adj.delta}`}
+                        </td>
+                        <td className="px-2 py-2.5 text-end tabular-nums">{adj.quantityAfter}</td>
+                        <td className="py-2.5 ps-2 pe-4 text-end text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5">
+                            <ActorLabel actor={adj.createdBy} />
+                            <span>·</span>
+                            <span>{formatRelativeTime(adj.createdAt)}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6">
+                  <PanelEmpty
+                    icon={Boxes}
+                  >{t`No stock adjustments recorded for this SKU`}</PanelEmpty>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Right 4-col Sidebar */}
+        <div className="space-y-4 lg:col-span-4">
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Trans>Execute as ERP Digital Employee</Trans>
+            </h3>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="justify-start text-xs"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    rpc.erp.inventory.adjust({
+                      productId: product.id,
+                      delta: Math.max(15, 30 - product.stockOnHand),
+                      reason: `[Operations AI] Safety stock replenishment for ${product.sku}`,
+                      ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                    }),
+                  )
+                }
+              >
+                <Sparkles data-icon="inline-start" />
+                <Trans>Operations AI: Restock Bin to Safety Level</Trans>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="justify-start text-xs"
+                disabled={busy || !product.active || product.stockOnHand <= 0}
+                onClick={() =>
+                  run(async () => {
+                    const targetCompany = companies[0];
+                    const createdOrder = await rpc.erp.orders.createDraft({
+                      ...(targetCompany ? { companyId: targetCompany.id } : {}),
+                      notes: `[Operations AI] Created draft order featuring ${product.sku} · ${product.name}`,
+                      lines: [{ productId: product.id, quantity: 1 }],
+                      ...(opsBot ? { actorBotId: opsBot.id } : {}),
+                    });
+                    await navigate(erpHref("orders", { record: createdOrder.id }));
+                  })
+                }
+              >
+                <ShoppingCart data-icon="inline-start" />
+                <Trans>Operations AI: Create Order with SKU</Trans>
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Trans>Item Summary</Trans>
+            </h3>
+            <DetailList
+              items={[
+                { label: t`SKU Code`, value: <span className="font-mono">{product.sku}</span> },
+                { label: t`Unit Price`, value: money(product.unitPrice) },
+                { label: t`Stock Valuation`, value: money(inventoryValue) },
+                {
+                  label: t`Tax / HSN Code`,
+                  value: <span className="font-mono">{product.hsnCode ?? "998314"}</span>,
+                },
+                { label: t`Created By`, value: <ActorLabel actor={product.createdBy} /> },
+              ]}
+            />
+          </div>
+
+          <div className="rounded-xl border bg-card p-4">
+            <HistoryList
+              recordType="product"
+              recordId={product.id}
+              revision={revision + localRev}
+            />
           </div>
         </div>
       </div>

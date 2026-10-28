@@ -72,9 +72,17 @@ export async function businessCall<Output>(
   actionId: BusinessActionId,
   input: unknown,
 ): Promise<Output> {
+  const actorBotId =
+    actor.botId ??
+    (input &&
+    typeof input === "object" &&
+    "actorBotId" in input &&
+    typeof (input as { actorBotId?: unknown }).actorBotId === "string"
+      ? (input as { actorBotId: string }).actorBotId
+      : undefined);
   const result = await executeBusinessAction(deps, actionId, input, {
     spaceId: actor.spaceId,
-    actor: { userId: actor.userId },
+    actor: { userId: actor.userId, ...(actorBotId ? { botId: actorBotId } : {}) },
   });
   if (!result.ok) throwBusinessError(result);
   return result.data as Output;

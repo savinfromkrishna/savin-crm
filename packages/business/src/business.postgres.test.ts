@@ -349,9 +349,9 @@ describePostgres("business actions (PostgreSQL)", () => {
     const first = await seedBusinessDemo(deps, { spaceId: spaceB, userId });
     const second = await seedBusinessDemo(deps, { spaceId: spaceB, userId });
     expect(second).toEqual(first);
-    expect(first.leadRefs).toEqual(["L-1", "L-2"]);
-    expect(await prisma.erpProduct.count({ where: { spaceId: spaceB } })).toBe(3);
-    expect(await prisma.crmCompany.count({ where: { spaceId: spaceB } })).toBe(2);
+    expect(first.leadRefs).toEqual(["L-1", "L-2", "L-3", "L-4", "L-5", "L-6"]);
+    expect(await prisma.erpProduct.count({ where: { spaceId: spaceB } })).toBe(6);
+    expect(await prisma.crmCompany.count({ where: { spaceId: spaceB } })).toBe(6);
   });
 
   it("executes the human + AI CRM vertical slice: lead enrichment, qualification, follow-up completion, and duplicate detection", async () => {
